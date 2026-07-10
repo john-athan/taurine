@@ -98,8 +98,16 @@ The menu gives you:
 | **Stay awake until an app quits…** | Pick a running app; Taurine releases the instant it exits. |
 | **Why is my Mac awake?** | Live list of every process holding a sleep assertion. |
 | **Also prevent system sleep** | Not just the display — the whole machine (for long jobs). |
+| **Keep awake with lid closed (AC only)** | Off by default — a closed lid sleeps normally. On, and only while awake + plugged in, Taurine holds the lid open too (`pmset disablesleep`, needs admin). Reverts on unplug, toggle-off, or quit. |
 | **Auto-off under 20% on battery** | The conscience. Won't drain your laptop overnight. |
 | **Start awake at launch** / **Start at login** | Set once, forget. |
+
+> **Lid-closed, carefully.** Ordinary sleep assertions (everything else Taurine
+> does) don't survive a shut lid — that's *clamshell* sleep, a separate path. The
+> only lever is `pmset disablesleep`, which is system-wide and persistent, so
+> Taurine engages it only while awake + on AC and always puts it back. A hard
+> crash can leave it set; if a closed lid ever won't sleep, run
+> `sudo pmset -a disablesleep 0`. And don't stuff an awake, lid-shut Mac in a bag.
 
 **CLI**
 

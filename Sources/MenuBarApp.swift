@@ -12,6 +12,7 @@ final class MenuBarApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let assertion = PowerAssertion()
     private let intents = IntentEngine()
     private let battery = Battery()
+    private let clamshell = ClamshellGuard()
     private var hotkey: Hotkey?
 
     // Live state.
@@ -32,6 +33,12 @@ final class MenuBarApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         get { defaults.bool(forKey: "startAwake") }
         set { defaults.set(newValue, forKey: "startAwake") }
     }
+    /// Off by default: closing the lid should sleep the Mac like normal.
+    /// On, and only while awake + on AC power, we hold the lid open too.
+    private var lidAwake: Bool {
+        get { defaults.bool(forKey: "lidAwake") }
+        set { defaults.set(newValue, forKey: "lidAwake") }
+    }
 
     // Menu items we mutate.
     private let statusHeader = NSMenuItem(title: "Taurine — idle", action: nil, keyEquivalent: "")
@@ -40,6 +47,7 @@ final class MenuBarApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var systemItem: NSMenuItem!
     private var batteryItem: NSMenuItem!
     private var startAwakeItem: NSMenuItem!
+    private var lidItem: NSMenuItem!
     private var diagItem: NSMenuItem!
 
     // MARK: - lifecycle
@@ -56,13 +64,21 @@ final class MenuBarApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         intents.onReasonEnded = { [weak self] in self?.deactivate(reason: "reason ended") }
 
         // The conscience: react to power changes without polling.
-        battery.onChange = { [weak self] in self?.enforceBatteryGuard() }
+        battery.onChange = { [weak self] in
+            self?.enforceBatteryGuard()
+            self?.enforceLidGuard()          // unplugged → drop the lid-open flag
+        }
 
         // Let the CLI (`taurine on/off/toggle`) drive us.
         listenForCLI()
 
         // Optional: come up already holding the line.
         if startAwake { activate(.manual) }
+    }
+
+    /// Belt and suspenders: whatever tears us down, put the lid flag back.
+    func applicationWillTerminate(_ n: Notification) {
+        clamshell.revertQuietly()
     }
 
     // MARK: - the two verbs
@@ -88,6 +104,7 @@ final class MenuBarApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
                           caption: "awake — \(intent.label)")
         render()
         enforceBatteryGuard()
+        enforceLidGuard()
     }
 
     /// Let go.
@@ -96,6 +113,7 @@ final class MenuBarApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         intents.cancel()
         assertion.release()
         intent = nil
+        enforceLidGuard()                 // no longer awake → let the lid sleep again
         Toast.shared.play(Bull.stop, near: statusItem.button,
                           tint: NSColor(calibratedRed: 0.6, green: 0.6, blue: 0.66, alpha: 1),
                           caption: reason)
@@ -110,6 +128,20 @@ final class MenuBarApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         deactivate(reason: "battery \(pct)% — Taurine stepped back")
     }
 
+    // MARK: - lid conscience
+
+    /// Drive the clamshell flag to match reality. Engaged only when the user
+    /// opted in *and* we're awake *and* on wall power; dropped otherwise. Silent
+    /// on background triggers (unplug, deactivate) — only the menu toggle surfaces
+    /// an admin failure, via `toggleLid`.
+    @discardableResult
+    private func enforceLidGuard() -> String? {
+        let want = lidAwake && isAwake && battery.onACPower
+        let err = clamshell.set(want)
+        render()
+        return err
+    }
+
     // MARK: - appearance
 
     private func render() {
@@ -121,8 +153,9 @@ final class MenuBarApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         default:                     symbol = "bolt.fill"
         }
         b.image = Self.icon(symbol) ?? Self.icon("bolt.fill")
-        b.toolTip = isAwake ? "Taurine — awake \(intent?.label ?? "")" : "Taurine — idle (Mac may sleep)"
-        statusHeader.title = isAwake ? "🐂 awake — \(intent?.label ?? "")" : "🐂 idle — Mac may sleep"
+        let lid = clamshell.active ? " · lid held" : ""
+        b.toolTip = isAwake ? "Taurine — awake \(intent?.label ?? "")\(lid)" : "Taurine — idle (Mac may sleep)"
+        statusHeader.title = isAwake ? "🐂 awake — \(intent?.label ?? "")\(lid)" : "🐂 idle — Mac may sleep"
     }
 
     /// SF Symbol as a template image, tolerant of symbols missing on old macOS.
@@ -178,6 +211,9 @@ final class MenuBarApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(.separator())
 
         systemItem   = add(menu, "Also prevent system sleep", #selector(toggleSystem))
+        lidItem      = add(menu, "Keep awake with lid closed (AC only)", #selector(toggleLid))
+        lidItem.toolTip = "Needs admin. Blocks lid-close sleep while awake and plugged in. "
+                        + "Reverts on unplug, toggle-off, or quit. Careful: an awake Mac in a closed bag can overheat."
         batteryItem  = add(menu, "Auto-off under 20% on battery", #selector(toggleBatteryGuard))
         startAwakeItem = add(menu, "Start awake at launch", #selector(toggleStartAwake))
         loginItem    = add(menu, "Start at login", #selector(toggleLogin))
@@ -199,6 +235,7 @@ final class MenuBarApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func menuWillOpen(_ menu: NSMenu) {
         if menu == statusItem.menu {
             systemItem.state = alsoSystemSleep ? .on : .off
+            lidItem.state = lidAwake ? .on : .off
             batteryItem.state = batteryGuard ? .on : .off
             startAwakeItem.state = startAwake ? .on : .off
             loginItem.state = LoginItem.isEnabled ? .on : .off
@@ -264,6 +301,22 @@ final class MenuBarApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func toggleBatteryGuard() { batteryGuard.toggle(); enforceBatteryGuard() }
     @objc private func toggleStartAwake() { startAwake.toggle() }
 
+    @objc private func toggleLid() {
+        lidAwake.toggle()
+        // If enabling failed the admin step (e.g. cancelled), fall back to off
+        // so the checkbox never lies about what's really in effect.
+        if let err = enforceLidGuard(), lidAwake {
+            lidAwake = false
+            enforceLidGuard()
+            let a = NSAlert(); a.messageText = "Couldn't keep the lid awake"; a.informativeText = err
+            a.runModal()
+        } else if lidAwake && !battery.onACPower {
+            Toast.shared.play(Bull.stop, near: statusItem.button,
+                              tint: NSColor(calibratedRed: 0.6, green: 0.6, blue: 0.66, alpha: 1),
+                              caption: "lid guard armed — engages on AC power")
+        }
+    }
+
     @objc private func toggleLogin() {
         if let err = LoginItem.toggle() {
             let a = NSAlert(); a.messageText = "Login item change failed"; a.informativeText = err
@@ -271,7 +324,11 @@ final class MenuBarApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
-    @objc private func quit() { assertion.release(); NSApp.terminate(nil) }
+    @objc private func quit() {
+        assertion.release()
+        clamshell.revertQuietly()          // never leave the lid flag set behind us
+        NSApp.terminate(nil)
+    }
 
     // MARK: - CLI bridge (taurine on/off/toggle)
 
