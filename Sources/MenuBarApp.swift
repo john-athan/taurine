@@ -49,6 +49,7 @@ final class MenuBarApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var startAwakeItem: NSMenuItem!
     private var lidItem: NSMenuItem!
     private var diagItem: NSMenuItem!
+    private var chargeItem: NSMenuItem!
 
     // MARK: - lifecycle
 
@@ -210,6 +211,15 @@ final class MenuBarApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         menu.addItem(.separator())
 
+        // The charge limit. Owned by a root daemon, not by this process; this
+        // submenu only writes a number to a file the daemon is watching.
+        chargeItem = NSMenuItem(title: "Charge limit", action: nil, keyEquivalent: "")
+        chargeItem.submenu = NSMenu()
+        chargeItem.submenu?.delegate = self
+        menu.addItem(chargeItem)
+
+        menu.addItem(.separator())
+
         systemItem   = add(menu, "Also prevent system sleep", #selector(toggleSystem))
         lidItem      = add(menu, "Keep awake with lid closed (AC only)", #selector(toggleLid))
         lidItem.toolTip = "Needs admin. Blocks lid-close sleep while awake and plugged in. "
@@ -240,11 +250,80 @@ final class MenuBarApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
             startAwakeItem.state = startAwake ? .on : .off
             loginItem.state = LoginItem.isEnabled ? .on : .off
             diagItem.title = Diagnostics.badge(activeTimers: intents.activeSourceCount)
+            chargeItem.title = "Charge limit: " + (ChargeState.read()?.summary ?? "off")
             return
         }
         if menu == whyItem.submenu { populateWhy(menu); return }
+        if menu == chargeItem.submenu { populateCharge(menu); return }
         // Otherwise it's the "until an app quits" submenu.
         populateRunningApps(menu)
+    }
+
+    /// Built fresh on open, from the state file the daemon last wrote. Nothing
+    /// here is cached or watched, so an unopened menu costs nothing.
+    private func populateCharge(_ menu: NSMenu) {
+        menu.removeAllItems()
+
+        guard ChargeInstaller.isInstalled else {
+            let it = NSMenuItem(title: "Enable charge limiting…", action: #selector(installCharge), keyEquivalent: "")
+            it.target = self
+            it.toolTip = "Installs a small root daemon that stops charging at your chosen level. "
+                       + "Asks for admin once, then never again."
+            menu.addItem(it)
+            return
+        }
+
+        let state = ChargeState.read()
+
+        if let state, !state.path.isSupported {
+            let it = NSMenuItem(title: "Not supported on this Mac", action: nil, keyEquivalent: "")
+            it.isEnabled = false
+            menu.addItem(it)
+            return
+        }
+
+        let header = NSMenuItem(title: state?.summary ?? "starting up…", action: nil, keyEquivalent: "")
+        header.isEnabled = false
+        menu.addItem(header)
+        menu.addItem(.separator())
+
+        let current = state?.limit
+        for pct in [60, 70, 75, 80, 85, 90] {
+            let it = NSMenuItem(title: "\(pct)%", action: #selector(setChargeLimit(_:)), keyEquivalent: "")
+            it.representedObject = pct
+            it.target = self
+            it.state = (current == pct) ? .on : .off
+            menu.addItem(it)
+        }
+
+        let off = NSMenuItem(title: "Off (charge to 100%)", action: #selector(setChargeLimit(_:)), keyEquivalent: "")
+        off.representedObject = nil as Int?
+        off.target = self
+        off.state = (current == nil) ? .on : .off
+        menu.addItem(off)
+
+        menu.addItem(.separator())
+
+        // The daemon runs a root-owned *copy* of this binary, so rebuilding the
+        // app leaves the copy behind. Say so rather than pretending they match.
+        if ChargeInstaller.isStale {
+            let it = NSMenuItem(title: "Update charge daemon…", action: #selector(installCharge), keyEquivalent: "")
+            it.target = self
+            it.toolTip = "Taurine has been rebuilt since the root daemon was installed. "
+                       + "This copies the new binary and restarts it."
+            menu.addItem(it)
+        }
+
+        let rm = NSMenuItem(title: "Remove charge daemon…", action: #selector(uninstallCharge), keyEquivalent: "")
+        rm.target = self
+        rm.toolTip = "Stops the daemon and re-enables normal charging."
+        menu.addItem(rm)
+
+        if let state, state.path != .unsupported {
+            let dbg = NSMenuItem(title: "via SMC \(state.path.rawValue)", action: nil, keyEquivalent: "")
+            dbg.isEnabled = false
+            menu.addItem(dbg)
+        }
     }
 
     private func populateWhy(_ menu: NSMenu) {
@@ -314,6 +393,42 @@ final class MenuBarApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
             Toast.shared.play(Bull.stop, near: statusItem.button,
                               tint: NSColor(calibratedRed: 0.6, green: 0.6, blue: 0.66, alpha: 1),
                               caption: "lid guard armed — engages on AC power")
+        }
+    }
+
+    // MARK: - charge limit
+
+    @objc private func installCharge() {
+        if let err = ChargeInstaller.install() {
+            let a = NSAlert(); a.messageText = "Couldn't install charge limiting"; a.informativeText = err
+            a.runModal()
+            return
+        }
+        // Give a fresh daemon a sensible default, but don't stomp an existing
+        // choice when this same item is used to refresh a stale helper.
+        let existing = ChargeConfig.read()
+        if existing == nil { _ = ChargeConfig.write(80) }
+        Toast.shared.play(Bull.stop, near: statusItem.button,
+                          tint: NSColor(calibratedRed: 0.36, green: 0.72, blue: 0.42, alpha: 1),
+                          caption: "charge limit \(existing ?? 80)%")
+    }
+
+    @objc private func setChargeLimit(_ sender: NSMenuItem) {
+        let limit = sender.representedObject as? Int
+        if let err = ChargeConfig.write(limit) {
+            let a = NSAlert(); a.messageText = "Couldn't set the charge limit"; a.informativeText = err
+            a.runModal()
+            return
+        }
+        Toast.shared.play(Bull.stop, near: statusItem.button,
+                          tint: NSColor(calibratedRed: 0.36, green: 0.72, blue: 0.42, alpha: 1),
+                          caption: limit.map { "charge limit \($0)%" } ?? "charging to 100%")
+    }
+
+    @objc private func uninstallCharge() {
+        if let err = ChargeInstaller.uninstall() {
+            let a = NSAlert(); a.messageText = "Couldn't remove the charge daemon"; a.informativeText = err
+            a.runModal()
         }
     }
 

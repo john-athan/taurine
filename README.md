@@ -100,6 +100,7 @@ The menu gives you:
 | **Also prevent system sleep** | Not just the display — the whole machine (for long jobs). |
 | **Keep awake with lid closed (AC only)** | Off by default — a closed lid sleeps normally. On, and only while awake + plugged in, Taurine holds the lid open too (`pmset disablesleep`, needs admin). Reverts on unplug, toggle-off, or quit. |
 | **Auto-off under 20% on battery** | The conscience. Won't drain your laptop overnight. |
+| **Charge limit** | Stop charging at 60–90% to spare the cell. One admin prompt to install, then free forever. |
 | **Start awake at launch** / **Start at login** | Set once, forget. |
 
 > **Lid-closed, carefully.** Ordinary sleep assertions (everything else Taurine
@@ -109,12 +110,50 @@ The menu gives you:
 > crash can leave it set; if a closed lid ever won't sleep, run
 > `sudo pmset -a disablesleep 0`. And don't stuff an awake, lid-shut Mac in a bag.
 
+---
+
+## Charge limit 🔋
+
+Lithium cells age fastest sitting at 100%. Taurine can stop charging at 80% and
+hold there while you stay plugged in.
+
+```bash
+taurine batt              # what's it doing right now?
+taurine batt 80           # stop charging at 80%
+taurine batt off          # back to charging all the way
+taurine batt unlock       # escape hatch, see below
+```
+
+Enable it once from **Charge limit → Enable charge limiting…** in the menu. That
+installs a small root LaunchDaemon (the same binary, run with `--charge-daemon`)
+and asks for your password once. After that, changing the limit is just a number
+written to a file the daemon is watching, so it never prompts again.
+
+**How it works.** The System Management Controller has a key that decides whether
+the wall adapter may charge the cell: `CHTE` on macOS 26+, `CH0B`+`CH0C` before
+that. Taurine probes which one your Mac has rather than checking a version
+number, and talks to it directly through IOKit. There's no bundled `smc` binary
+and nothing gets shelled out.
+
+**It costs you nothing to run.** No timers, no polling, no 30-second wake-ups.
+The daemon sleeps in `mach_msg` at 0% CPU and is woken only by the kernel: a
+power-source change, a wake from sleep, or you picking a new limit. It writes to
+the SMC a couple of times a day, and a 3% deadband below the limit keeps it from
+flapping at the boundary.
+
+> **The escape hatch.** The inhibit bit lives in the SMC, not in the daemon, so a
+> hard kill at the wrong moment could leave a Mac that won't charge. `KeepAlive`
+> plus a recover-on-start covers this, and any clean exit releases the bit. If it
+> ever does get stuck, `taurine batt unlock` clears it unconditionally. Run
+> `make uninstall` and the daemon is released before its binary is removed.
+
 **CLI**
 
 ```bash
 taurine -- make build     # awake for exactly this command's lifetime
 taurine why               # who is keeping this Mac awake right now?
 taurine on | off | toggle # drive the running menu bar app
+taurine batt 80           # stop charging at 80%
 taurine help
 ```
 
