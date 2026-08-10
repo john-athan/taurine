@@ -19,9 +19,9 @@ struct ActivitySample {
     /// deliberately not used: sampling must survive a clock change.
     var uptime: TimeInterval
 
-    /// Seconds since the previous sample. Zero on the first sample of a run,
-    /// which is the signal to every rate probe that it has no baseline yet and
-    /// should report nothing rather than a number divided by zero.
+    /// Seconds since the previous reading. Always positive: probes take their
+    /// baseline when they open, so even the first sample of a session measures
+    /// a real span of time (a quarter of a second) rather than nothing.
     var interval: TimeInterval
 
     var cpu: CPUActivity?

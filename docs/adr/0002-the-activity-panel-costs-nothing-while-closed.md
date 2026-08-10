@@ -48,9 +48,12 @@ drawn by hand into an `NSView`.
 
 - Sampling runs on a utility queue, not the main thread, and samples arrive on
   the main queue complete. Reading IOReport takes single-digit milliseconds.
-- The first sample of every session has `interval == 0`. Rate probes report
-  nothing rather than dividing by zero, so the first frame shows blanks for
-  rates and real numbers for levels.
+- Probes take their baseline readings in `open()`, and the first sample follows
+  a quarter of a second later. A panel whose first frame is blank looks broken,
+  and one that waits a full second before saying anything feels slow; opening
+  the probes is the moment the clock starts, so neither happens. Every sample
+  carries a positive interval and no probe has to describe a state it has no
+  baseline for.
 - Opening the panel is slightly more expensive than keeping it warm would be:
   probes open, counters take a baseline reading. That is the trade, and it is
   paid by the person who asked to see it.

@@ -12,13 +12,21 @@ import Foundation
 /// enriches an earlier one (frequencies onto clusters) simply come later in the
 /// list. A probe that cannot answer leaves its slice alone rather than writing
 /// a zero.
+///
+/// Anything that measures a rate takes its baseline reading in `open()`, not on
+/// its first `read`. The difference is what the user sees: a panel whose first
+/// frame is blank looks broken, and a panel that has to wait a full second
+/// before it says anything feels slow. Opening the probes is the moment the
+/// clock starts, so the first frame can arrive a quarter of a second later with
+/// real numbers in it.
 protocol ActivityProbe: AnyObject {
 
     /// Short name, used in diagnostics when a probe declines to open.
     var name: String { get }
 
-    /// Acquire whatever the probe needs. Throwing here drops just this probe;
-    /// the rest of the panel carries on without it.
+    /// Acquire whatever the probe needs, and take the first reading of any
+    /// counter this probe measures the change in. Throwing here drops just this
+    /// probe; the rest of the panel carries on without it.
     func open() throws
 
     /// Release everything. Called on every panel close, and safe to call twice.
@@ -60,9 +68,14 @@ final class ActivityMonitor {
 
     var isRunning: Bool { timer != nil }
 
-    /// Begin sampling every `interval` seconds. The first sample is taken
-    /// immediately and carries `interval == 0`, which tells rate probes they
-    /// have no baseline yet.
+    /// Begin sampling every `interval` seconds.
+    ///
+    /// Opening the probes is what starts the clock, so the first sample comes a
+    /// quarter of a second later rather than immediately: long enough to be a
+    /// real measurement, short enough that the panel is populated before the
+    /// user has finished looking at it. Every sample therefore carries a
+    /// positive `interval`, and no probe ever has to describe a state it has no
+    /// baseline for.
     func start(interval: TimeInterval) {
         guard timer == nil else { return }
 
@@ -77,13 +90,15 @@ final class ActivityMonitor {
                     return nil
                 }
             }
-            lastUptime = nil
+            lastUptime = ProcessInfo.processInfo.systemUptime
         }
 
+        let firstSample = min(0.25, interval)
         let t = DispatchSource.makeTimerSource(queue: queue)
         // A tenth of the interval of leeway lets the kernel coalesce our wakeup
         // with one it was going to make anyway.
-        t.schedule(deadline: .now(), repeating: interval, leeway: .milliseconds(Int(interval * 100)))
+        t.schedule(deadline: .now() + firstSample, repeating: interval,
+                   leeway: .milliseconds(Int(interval * 100)))
         t.setEventHandler { [weak self] in self?.tick() }
         timer = t
         t.resume()
@@ -105,10 +120,14 @@ final class ActivityMonitor {
 
     private func tick() {
         let now = ProcessInfo.processInfo.systemUptime
-        let elapsed = lastUptime.map { now - $0 } ?? 0
+        // The baseline was taken in `start`, so there is always a previous
+        // instant to measure from. A clamp rather than a guard: a suspended
+        // machine can hand back an interval that makes no sense, and dividing
+        // by it would be worse than treating it as one tick.
+        let elapsed = max(0.001, now - (lastUptime ?? now))
         lastUptime = now
 
-        var sample = ActivitySample(uptime: now, interval: max(0, elapsed))
+        var sample = ActivitySample(uptime: now, interval: elapsed)
         for probe in open { probe.read(into: &sample) }
 
         DispatchQueue.main.async { [weak self] in self?.onSample?(sample) }
