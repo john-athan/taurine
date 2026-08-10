@@ -26,6 +26,10 @@ taurine why
 
 And while it's holding the line, a bull gallops out of your menu bar to say so.
 
+Ask what your Mac is *spending itself on* and it answers in watts, from the
+chip's own energy counters, with no password and nothing running until you open
+the panel.
+
 No polling, no network, no analytics. ~15 MB resident, **0 idle timers, 0
 sockets** — a number it shows you rather than a claim it makes.
 
@@ -80,7 +84,11 @@ echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc && source ~/.zshrc
 ```
 
 Requires macOS 13+ and the Xcode command line tools (`xcode-select --install`).
-No Xcode project, no dependencies — just `swiftc`.
+No Xcode project, no dependencies, just `swiftc`.
+
+`make test` builds the app into a test binary and runs it. Same toolchain, no
+package manager, no network. See
+[ADR 1](docs/adr/0001-tests-without-a-package-manager.md).
 
 ---
 
@@ -97,6 +105,8 @@ The menu gives you:
 | **Keep awake for…** | 15 min / 30 min / 1 h / 2 h, then auto-off. |
 | **Stay awake until an app quits…** | Pick a running app; Taurine releases the instant it exits. |
 | **Why is my Mac awake?** | Live list of every process holding a sleep assertion. |
+| **What is this Mac doing?** | The activity panel: cores, watts, memory, disk, network. Costs nothing until you open it. |
+| **Things Apple got wrong** | Small fixes for settings the system should have had. Currently: scroll direction per device. |
 | **Also prevent system sleep** | Not just the display — the whole machine (for long jobs). |
 | **Keep awake with lid closed (AC only)** | Off by default — a closed lid sleeps normally. On, and only while awake + plugged in, Taurine holds the lid open too (`pmset disablesleep`, needs admin). Reverts on unplug, toggle-off, or quit. |
 | **Auto-off under 20% on battery** | The conscience. Won't drain your laptop overnight. |
@@ -109,6 +119,55 @@ The menu gives you:
 > Taurine engages it only while awake + on AC and always puts it back. A hard
 > crash can leave it set; if a closed lid ever won't sleep, run
 > `sudo pmset -a disablesleep 0`. And don't stuff an awake, lid-shut Mac in a bag.
+
+---
+
+## What is this Mac doing? 📈
+
+Everything `mactop` shows you in a terminal, in a panel that drops out of the
+menu bar: per-cluster and per-core load with the frequency each cluster is
+actually running at, GPU utilisation, CPU, GPU and Neural Engine watts, memory
+split into app, wired and compressed with swap when swap is in use, and disk and
+network rates with a minute of history.
+
+**No password.** Every other Mac power monitor shells out to `powermetrics`,
+which will not run without root. Taurine reads the same energy counters directly
+through IOReport, which an ordinary process may do, so the panel never asks for
+anything. See [ADR 3](docs/adr/0003-ioreport-for-power-without-root.md).
+
+**No cost while it is shut.** Nothing samples until the panel is on screen.
+Opening it creates the app's only repeating timer and opens the probes; closing
+it cancels the timer, closes the probes and throws the history away. The badge
+under the menu proves it: open the panel and it reads `1 timer`, close it and it
+reads `0 timers` again. See
+[ADR 2](docs/adr/0002-the-activity-panel-costs-nothing-while-closed.md).
+
+Anything this Mac cannot answer is left out rather than drawn as a zero, with a
+line at the bottom naming what is missing and why.
+
+---
+
+## Things Apple got wrong ⚙️
+
+A shelf for settings the system should have shipped correctly. The rule for
+what belongs here: small, local, reversible, and obviously right once you see
+it.
+
+**Scroll direction follows the device.** macOS has one scroll direction for the
+whole machine, so anyone using a trackpad and a wheel mouse has to pick which of
+the two feels wrong. Switch this on and each device gets the direction it
+should have had: trackpads and the Magic Mouse scroll naturally, wheel mice
+scroll the traditional way. Flip the system setting and the correction moves to
+the other class, so the feature works the same for people who prefer the
+traditional feel everywhere.
+
+Off by default, because modifying scroll events needs Accessibility permission,
+and Taurine would rather ask for nothing until you ask it to. macOS grants that
+permission to a specific build of a binary, so a rebuild or an upgrade means
+granting it again: remove Taurine from the Accessibility list with the minus
+button and add it back. The menu item says so when that has happened, instead of
+looking switched on and doing nothing. See
+[ADR 4](docs/adr/0004-scroll-direction-belongs-to-the-device.md).
 
 ---
 
@@ -160,6 +219,15 @@ taurine help
 `taurine -- <command>` is `caffeinate <command>` with a pulse: it prints a bull,
 holds display **and** system assertions for the child's life, and lets go the
 moment it exits — great in front of a long build or upload.
+
+---
+
+## How it is built
+
+Decisions worth writing down live in [docs/adr](docs/adr/README.md): why there
+is no package manager, why the activity panel costs nothing while it is closed,
+why power comes from IOReport rather than `powermetrics`, and why scroll
+direction belongs to the device.
 
 ---
 
