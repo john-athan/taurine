@@ -7,6 +7,7 @@ import Cocoa
 ///   • a subcommand   → a quick CLI that talks to the running app, or acts alone
 ///
 /// This lets `taurine` feel like a native tool while still being the GUI.
+
 /// `taurine batt [80|off]`. Reads state straight off disk and writes the limit
 /// straight to disk; the daemon notices by itself. No running GUI required.
 func chargeCLI(_ args: [String]) -> Int32 {
@@ -121,15 +122,3 @@ func runCLI(_ args: [String]) -> Int32? {
         return 2
     }
 }
-
-let argv = Array(CommandLine.arguments.dropFirst())
-if let code = runCLI(argv) {
-    exit(code)
-}
-
-// No subcommand → be the bull in the menu bar.
-let app = NSApplication.shared
-app.setActivationPolicy(.accessory)          // menu bar only, no Dock icon
-let controller = MenuBarApp()
-app.delegate = controller
-app.run()

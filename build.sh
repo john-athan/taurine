@@ -9,7 +9,11 @@ BIN="$APP/Contents/MacOS/taurine"
 echo "▸ compiling…"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS"
-swiftc -O -o "$BIN" Sources/*.swift \
+# Sources/ is grouped by subsystem (App, Awake, Charge, Activity, Scroll), so the
+# file list is gathered rather than globbed. Sorted, so a build is reproducible.
+SOURCES=()
+while IFS= read -r f; do SOURCES+=("$f"); done < <(find Sources -name '*.swift' | sort)
+swiftc -O -o "$BIN" "${SOURCES[@]}" \
   -framework Cocoa -framework IOKit -framework Carbon -framework ServiceManagement
 
 cat > "$APP/Contents/Info.plist" <<'PLIST'

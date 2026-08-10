@@ -9,10 +9,13 @@ SUPPORT := /Library/Application Support/Taurine
 # group-writable by admin and so must never be a root LaunchDaemon target).
 HELPER  := /Library/PrivilegedHelperTools/$(DAEMON)
 
-.PHONY: build install uninstall clean
+.PHONY: build test install uninstall clean
 
 build:
 	./build.sh
+
+test:
+	./tests/run.sh
 
 install: build
 	rm -rf "$(PREFIX)/$(APP)"
@@ -51,4 +54,4 @@ uninstall:
 	@echo "▸ removed Taurine"
 
 clean:
-	rm -rf "$(APP)"
+	rm -rf "$(APP)" .build
