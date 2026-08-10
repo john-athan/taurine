@@ -30,8 +30,10 @@ Ask what your Mac is *spending itself on* and it answers in watts, from the
 chip's own energy counters, with no password and nothing running until you open
 the panel.
 
-No polling, no network, no analytics. ~15 MB resident, **0 idle timers, 0
-sockets** — a number it shows you rather than a claim it makes.
+No polling, no network, no analytics. **0 idle timers, 0 sockets**, and a
+resident figure read live from the kernel rather than asserted here: the menu
+badge shows all three, and on macOS 26 it reads about 45 MB, nearly all of it
+AppKit pages shared with every other app on the Mac.
 
 > "Taurine" is the energy-drink amino acid (and *Taurus*, the bull). No
 > affiliation with, or endorsement by, any beverage company.
