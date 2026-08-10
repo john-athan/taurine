@@ -101,7 +101,7 @@ final class MenuBarApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func applicationWillTerminate(_ n: Notification) {
         clamshell.revertQuietly()
         scroll.stop()
-        activity.close()
+        activityPanel?.close()
     }
 
     // MARK: - the two verbs
@@ -502,7 +502,7 @@ final class MenuBarApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         assertion.release()
         clamshell.revertQuietly()          // never leave the lid flag set behind us
         scroll.stop()                      // and never leave a tap on the session
-        activity.close()
+        activityPanel?.close()
         NSApp.terminate(nil)
     }
 

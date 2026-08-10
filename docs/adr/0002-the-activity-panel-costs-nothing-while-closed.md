@@ -27,8 +27,14 @@ Nothing samples until the panel is visible, and nothing survives it closing.
   panel. A closed panel remembers nothing, which is also the honest behaviour:
   a graph of the last minute is a lie if the app was not watching for that
   minute.
-- The badge stays truthful. Open the panel and it reads `1 timer`; close it and
-  it reads `0 timers` again.
+- The panel prints its own cost, in the same form as the menu badge. The menu
+  badge cannot do this job: the popover is transient, so opening the menu
+  dismisses the panel, and a badge that always reads `0 timers` proves nothing
+  about the panel. Inside the panel the number is both live and checkable,
+  which is the point.
+- The panel is built the first time somebody opens it, and the teardown paths
+  ask whether it exists rather than asking for it. Quitting a Taurine whose
+  panel was never opened must not construct a popover in order to close it.
 
 The panel is an `NSPopover` hung off the status item, opened from a menu item,
 drawn by hand into an `NSView`.
