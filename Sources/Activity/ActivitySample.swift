@@ -32,10 +32,23 @@ struct ActivitySample {
     var power: PowerActivity?
     var thermal: ThermalActivity?
 
+    /// Probes that declined to open for this session, so the panel can name
+    /// what is missing instead of leaving a silent gap. Carried in the sample
+    /// rather than read off the monitor: the sample is the one thing that
+    /// crosses from the sampling queue to the main thread, and a second channel
+    /// would be a second thing to get wrong.
+    var unavailable: [ProbeFailure] = []
+
     init(uptime: TimeInterval, interval: TimeInterval) {
         self.uptime = uptime
         self.interval = interval
     }
+}
+
+/// A probe that could not open, and the reason it gave.
+struct ProbeFailure {
+    let name: String
+    let reason: String
 }
 
 /// Which half of an Apple Silicon chip a core belongs to.

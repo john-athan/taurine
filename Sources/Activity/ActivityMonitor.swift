@@ -52,21 +52,20 @@ final class ActivityMonitor {
     /// Delivered on the main queue, once per interval.
     var onSample: ((ActivitySample) -> Void)?
 
-    /// Probes that refused to open, in the order they were tried. Shown in the
-    /// panel's footer so a missing tile has a stated reason.
-    private(set) var unavailable: [(name: String, reason: String)] = []
-
     private let probes: [ActivityProbe]
     private let queue = DispatchQueue(label: "io.github.john-athan.taurine.activity", qos: .utility)
     private var timer: DispatchSourceTimer?
     private var open: [ActivityProbe] = []
+    private var unavailable: [ProbeFailure] = []
     private var lastUptime: TimeInterval?
+    private var running = false
 
     init(probes: [ActivityProbe]) {
         self.probes = probes
     }
 
-    var isRunning: Bool { timer != nil }
+    /// True between `start` and `stop`, whatever the sampling queue is doing.
+    var isRunning: Bool { running }
 
     /// Begin sampling every `interval` seconds.
     ///
@@ -76,47 +75,69 @@ final class ActivityMonitor {
     /// user has finished looking at it. Every sample therefore carries a
     /// positive `interval`, and no probe ever has to describe a state it has no
     /// baseline for.
+    /// Opening is done on the sampling queue, not here. One probe alone takes
+    /// the better part of a tenth of a second to enumerate what the chip
+    /// publishes, and the caller is a menu item click: the popover has to be on
+    /// screen in that time, not after it.
     func start(interval: TimeInterval) {
-        guard timer == nil else { return }
+        guard !running else { return }
+        running = true
 
-        queue.sync {
-            unavailable = []
-            open = probes.compactMap { probe in
+        queue.async { [weak self] in
+            guard let self, self.running else { return }
+            var failures: [ProbeFailure] = []
+            self.open = self.probes.compactMap { probe in
                 do {
                     try probe.open()
                     return probe
                 } catch {
-                    unavailable.append((probe.name, "\(error)"))
+                    failures.append(ProbeFailure(name: probe.name, reason: "\(error)"))
                     return nil
                 }
             }
-            lastUptime = ProcessInfo.processInfo.systemUptime
-        }
+            self.unavailable = failures
+            self.lastUptime = ProcessInfo.processInfo.systemUptime
 
-        let firstSample = min(0.25, interval)
-        let t = DispatchSource.makeTimerSource(queue: queue)
-        // A tenth of the interval of leeway lets the kernel coalesce our wakeup
-        // with one it was going to make anyway.
-        t.schedule(deadline: .now() + firstSample, repeating: interval,
-                   leeway: .milliseconds(Int(interval * 100)))
-        t.setEventHandler { [weak self] in self?.tick() }
-        timer = t
-        t.resume()
+            let firstSample = min(0.25, interval)
+            let t = DispatchSource.makeTimerSource(queue: self.queue)
+            // A tenth of the interval of leeway lets the kernel coalesce our
+            // wakeup with one it was going to make anyway.
+            t.schedule(deadline: .now() + firstSample, repeating: interval,
+                       leeway: .milliseconds(Int(interval * 100)))
+            t.setEventHandler { [weak self] in self?.tick() }
+            self.timer = t
+            t.resume()
+        }
     }
 
-    /// Stop sampling and give everything back.
+    /// Stop sampling and give everything back. Safe to call from anywhere, at
+    /// any point in the opening sequence: the teardown lands on the same serial
+    /// queue as the setup, so it cannot overtake it.
     func stop() {
-        guard let t = timer else { return }
-        timer = nil
-        t.cancel()
-        queue.sync {
-            for probe in open { probe.close() }
-            open = []
-            lastUptime = nil
+        guard running else { return }
+        running = false
+
+        queue.async { [weak self] in
+            guard let self else { return }
+            self.timer?.cancel()
+            self.timer = nil
+            for probe in self.open { probe.close() }
+            self.open = []
+            self.unavailable = []
+            self.lastUptime = nil
         }
     }
 
-    deinit { stop() }
+    deinit {
+        // Not `stop()`: an async hop that captures a deallocating object is a
+        // crash waiting for a slow machine. Whatever is still open is closed
+        // here and now, on whichever thread let the last reference go.
+        running = false
+        timer?.cancel()
+        timer = nil
+        for probe in open { probe.close() }
+        open = []
+    }
 
     private func tick() {
         let now = ProcessInfo.processInfo.systemUptime
@@ -128,6 +149,7 @@ final class ActivityMonitor {
         lastUptime = now
 
         var sample = ActivitySample(uptime: now, interval: elapsed)
+        sample.unavailable = unavailable
         for probe in open { probe.read(into: &sample) }
 
         DispatchQueue.main.async { [weak self] in self?.onSample?(sample) }

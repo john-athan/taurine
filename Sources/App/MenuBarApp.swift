@@ -13,7 +13,20 @@ final class MenuBarApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let intents = IntentEngine()
     private let battery = Battery()
     private let clamshell = ClamshellGuard()
+    private let scroll = ScrollDirectionFixer()
     private var hotkey: Hotkey?
+
+    /// Built on first use and never before: a Mac whose owner never asks what
+    /// it is doing should not carry a popover, a view tree or a probe list.
+    /// Deliberately not `lazy var`, because the teardown paths must be able to
+    /// ask "did this ever exist?" without bringing it into existence.
+    private var activityPanel: ActivityPanelController?
+    private var activity: ActivityPanelController {
+        if let panel = activityPanel { return panel }
+        let panel = ActivityPanelController(probes: ActivityProbes.standard())
+        activityPanel = panel
+        return panel
+    }
 
     // Live state.
     private var intent: Intent?               // nil == asleep-allowed (idle)
@@ -50,6 +63,8 @@ final class MenuBarApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var lidItem: NSMenuItem!
     private var diagItem: NSMenuItem!
     private var chargeItem: NSMenuItem!
+    private var scrollItem: NSMenuItem!
+    private var scrollFixItem: NSMenuItem!
 
     // MARK: - lifecycle
 
@@ -70,6 +85,10 @@ final class MenuBarApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
             self?.enforceLidGuard()          // unplugged → drop the lid-open flag
         }
 
+        // Things Apple got wrong: give every pointing device the scroll
+        // direction it should have had. No-op unless the user switched it on.
+        scroll.startIfEnabled()
+
         // Let the CLI (`taurine on/off/toggle`) drive us.
         listenForCLI()
 
@@ -77,9 +96,12 @@ final class MenuBarApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if startAwake { activate(.manual) }
     }
 
-    /// Belt and suspenders: whatever tears us down, put the lid flag back.
+    /// Belt and suspenders: whatever tears us down, put the lid flag back and
+    /// let go of everything the panel and the tap are holding.
     func applicationWillTerminate(_ n: Notification) {
         clamshell.revertQuietly()
+        scroll.stop()
+        activity.close()
     }
 
     // MARK: - the two verbs
@@ -204,6 +226,9 @@ final class MenuBarApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         whyItem.submenu?.delegate = self
         menu.addItem(whyItem)
 
+        // The other truth serum: what the machine is spending itself on.
+        add(menu, "What is this Mac doing?", #selector(showActivity))
+
         // The receipts (refreshed live whenever the menu opens).
         diagItem = NSMenuItem(title: Diagnostics.badge(activeTimers: 0), action: nil, keyEquivalent: "")
         diagItem.isEnabled = false
@@ -217,6 +242,16 @@ final class MenuBarApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         chargeItem.submenu = NSMenu()
         chargeItem.submenu?.delegate = self
         menu.addItem(chargeItem)
+
+        menu.addItem(.separator())
+
+        // Things Apple got wrong. One entry so far; the shelf is built for more.
+        let wrongMenu = NSMenu()
+        scrollItem = add(wrongMenu, scroll.label, #selector(toggleScrollFix))
+        scrollFixItem = add(wrongMenu, "Grant Accessibility permission…", #selector(grantScrollPermission))
+        let wrongItem = NSMenuItem(title: "Things Apple got wrong", action: nil, keyEquivalent: "")
+        wrongItem.submenu = wrongMenu
+        menu.addItem(wrongItem)
 
         menu.addItem(.separator())
 
@@ -251,6 +286,12 @@ final class MenuBarApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
             loginItem.state = LoginItem.isEnabled ? .on : .off
             diagItem.title = Diagnostics.badge(activeTimers: intents.activeSourceCount)
             chargeItem.title = "Charge limit: " + (ChargeState.read()?.summary ?? "off")
+            scroll.refresh()
+            scrollItem.title = scroll.label
+            scrollItem.state = scroll.isEnabled ? .on : .off
+            scrollItem.toolTip = scroll.tooltip
+            scrollFixItem.isHidden = scroll.explanation == nil
+            scrollFixItem.toolTip = scroll.explanation
             return
         }
         if menu == whyItem.submenu { populateWhy(menu); return }
@@ -373,6 +414,24 @@ final class MenuBarApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         activate(.untilProcessExits(pid: pid, name: name))
     }
 
+    @objc private func showActivity() { activity.show(relativeTo: statusItem.button) }
+
+    /// Switching the scroll fix on is the one place Taurine can need a
+    /// permission it has never asked for, so the failure is explained where the
+    /// click happened rather than left to a menu item that quietly says nothing.
+    @objc private func toggleScrollFix() {
+        scroll.setEnabled(!scroll.isEnabled)
+        guard let why = scroll.explanation else { return }
+        let a = NSAlert()
+        a.messageText = "Scroll direction needs permission"
+        a.informativeText = why
+        a.addButton(withTitle: "Open Accessibility Settings")
+        a.addButton(withTitle: "Later")
+        if a.runModal() == .alertFirstButtonReturn { scroll.requestPermission() }
+    }
+
+    @objc private func grantScrollPermission() { scroll.requestPermission() }
+
     @objc private func toggleSystem() {
         alsoSystemSleep.toggle()
         if isAwake, let i = intent { activate(i) }   // re-apply with new guards
@@ -442,6 +501,8 @@ final class MenuBarApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func quit() {
         assertion.release()
         clamshell.revertQuietly()          // never leave the lid flag set behind us
+        scroll.stop()                      // and never leave a tap on the session
+        activity.close()
         NSApp.terminate(nil)
     }
 
