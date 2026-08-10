@@ -110,7 +110,7 @@ The menu gives you:
 | **What is this Mac doing?** | The activity panel: cores, GPU, watts, memory, disk, network. Costs nothing until you open it. |
 | *(the badge)* | `45.2 MB · 0 timers · 0 sockets`, read live from the kernel every time the menu opens. Not a claim, a measurement. |
 | **Charge limit** | Stop charging at 60–90% to spare the cell. One admin prompt to install, then free forever. |
-| **Things Apple got wrong** | Small fixes for settings the system should have had. Currently: scroll direction per device. |
+| **Things Apple got wrong** | Small fixes the system should have shipped. Currently: scroll direction per device, and ⌘X / ⌘V to cut and paste files in Finder. |
 | **Also prevent system sleep** | Not just the display — the whole machine (for long jobs). |
 | **Keep awake with lid closed (AC only)** | Off by default — a closed lid sleeps normally. On, and only while awake + plugged in, Taurine holds the lid open too (`pmset disablesleep`, needs admin). Reverts on unplug, toggle-off, or quit. |
 | **Auto-off under 20% on battery** | The conscience. Won't drain your laptop overnight. |
@@ -179,6 +179,30 @@ feature appears to do nothing for that mouse. Invert the wheel in the vendor
 software instead, or quit it and let Apple's own driver present the mouse. The
 reasoning, the evidence and the better design that is not written yet are all in
 [ADR 4](docs/adr/0004-scroll-direction-belongs-to-the-device.md).
+
+**⌘X and ⌘V cut and paste files in Finder.** ⌘X has never done anything in
+Finder. The move has always been there, as ⌥⌘V ("Move Item Here"), behind a
+keystroke almost nobody finds. Switch this on and the two keys your hands
+already know do it:
+
+```
+⌘X  →  ⌘C     copy, and remember a cut is pending
+⌘V  →  ⌥⌘V    Move Item Here, if that cut is still on the pasteboard
+```
+
+**Taurine moves no files.** It rewrites two keystrokes into two Finder already
+answers, and Finder does the rest, so the progress sheet, the "an item with that
+name already exists" dialog, the password prompt for a folder you don't own and
+⌘Z to undo all behave exactly as they always do. Renaming is untouched: in a
+text field ⌘X still cuts text. Nothing moves until you paste, so a cut you never
+paste is just a copy you never pasted, and ⌘C or Escape calls it off.
+
+Off by default, and it needs the same Accessibility permission as the scroll
+fix. The keyboard tap it uses exists **only while Finder is the front
+application**: switch to anything else and the tap and its thread are gone, so
+there is nothing that could see you typing. The evidence, the measurements and
+the cases where it declines to act are in
+[ADR 6](docs/adr/0006-cut-and-paste-in-finder.md).
 
 ---
 

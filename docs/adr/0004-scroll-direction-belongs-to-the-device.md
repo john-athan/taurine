@@ -132,8 +132,10 @@ claimed about SteerMouse or USB Overdrive.
 - Taking the tap down is synchronous: `stop()` does not return until the tap
   thread has left its run loop. Anything less means the callback can still be
   running over memory the app has released.
-- Only scroll wheel events are tapped. Taurine sees no keystrokes and no mouse
-  buttons.
+- Only scroll wheel events are tapped by this feature. Taurine sees no
+  keystrokes and no mouse buttons on account of it. (ADR 6 later added a
+  keyboard tap for a different fix. It is a separate tap, switched on
+  separately, and it exists only while Finder is the front application.)
 - A mouse driven by vendor software may not be corrected at all, and the menu
   cannot tell that this has happened. See "What this gets wrong".
 - The premise that a session tap sees deltas *after* macOS has applied

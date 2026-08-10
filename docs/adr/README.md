@@ -11,3 +11,4 @@ decided, and what it costs.
 | [3](0003-ioreport-for-power-without-root.md) | Power readings come from IOReport, not from powermetrics |
 | [4](0004-scroll-direction-belongs-to-the-device.md) | Scroll direction belongs to the device, not to the Mac |
 | [5](0005-read-the-counters-the-kernel-keeps-wide.md) | Read the counters the kernel keeps wide |
+| [6](0006-cut-and-paste-in-finder.md) | ⌘X in Finder means cut, by rewriting two keys rather than moving any files |

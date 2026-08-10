@@ -14,6 +14,7 @@ final class MenuBarApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let battery = Battery()
     private let clamshell = ClamshellGuard()
     private let scroll = ScrollDirectionFixer()
+    private let finderCut = FinderCutPaste()
     private var hotkey: Hotkey?
 
     /// Built on first use and never before: a Mac whose owner never asks what
@@ -64,7 +65,8 @@ final class MenuBarApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var diagItem: NSMenuItem!
     private var chargeItem: NSMenuItem!
     private var scrollItem: NSMenuItem!
-    private var scrollFixItem: NSMenuItem!
+    private var finderCutItem: NSMenuItem!
+    private var permissionItem: NSMenuItem!
 
     // MARK: - lifecycle
 
@@ -86,8 +88,10 @@ final class MenuBarApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
 
         // Things Apple got wrong: give every pointing device the scroll
-        // direction it should have had. No-op unless the user switched it on.
+        // direction it should have had, and let ⌘X mean cut in Finder. Both are
+        // no-ops unless the user switched them on.
         scroll.startIfEnabled()
+        finderCut.startIfEnabled()
 
         // Let the CLI (`taurine on/off/toggle`) drive us.
         listenForCLI()
@@ -102,6 +106,7 @@ final class MenuBarApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         assertion.release()
         clamshell.revertQuietly()
         scroll.stop()
+        finderCut.stop()
         activityPanel?.close()
     }
 
@@ -246,10 +251,12 @@ final class MenuBarApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         menu.addItem(.separator())
 
-        // Things Apple got wrong. One entry so far; the shelf is built for more.
+        // Things Apple got wrong. Both entries need the same permission, so
+        // there is one item to go and get it, shown when either is waiting.
         let wrongMenu = NSMenu()
         scrollItem = add(wrongMenu, scroll.label, #selector(toggleScrollFix))
-        scrollFixItem = add(wrongMenu, "Grant Accessibility permission…", #selector(grantScrollPermission))
+        finderCutItem = add(wrongMenu, finderCut.label, #selector(toggleFinderCut))
+        permissionItem = add(wrongMenu, "Grant Accessibility permission…", #selector(grantPermission))
         let wrongItem = NSMenuItem(title: "Things Apple got wrong", action: nil, keyEquivalent: "")
         wrongItem.submenu = wrongMenu
         menu.addItem(wrongItem)
@@ -291,8 +298,14 @@ final class MenuBarApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
             scrollItem.title = scroll.label
             scrollItem.state = scroll.isEnabled ? .on : .off
             scrollItem.toolTip = scroll.tooltip
-            scrollFixItem.isHidden = scroll.explanation == nil
-            scrollFixItem.toolTip = scroll.explanation
+            finderCut.refresh()
+            finderCutItem.title = finderCut.label
+            finderCutItem.state = finderCut.isEnabled ? .on : .off
+            finderCutItem.toolTip = finderCut.tooltip
+            // One fix-it item for both, carrying whichever complaint is live.
+            let complaint = scroll.explanation ?? finderCut.explanation
+            permissionItem.isHidden = complaint == nil
+            permissionItem.toolTip = complaint
             return
         }
         if menu == whyItem.submenu { populateWhy(menu); return }
@@ -431,7 +444,24 @@ final class MenuBarApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if a.runModal() == .alertFirstButtonReturn { scroll.requestPermission() }
     }
 
-    @objc private func grantScrollPermission() { scroll.requestPermission() }
+    /// Same story for the Finder fix, and the same one place to explain it.
+    @objc private func toggleFinderCut() {
+        finderCut.setEnabled(!finderCut.isEnabled)
+        guard let why = finderCut.explanation else { return }
+        let a = NSAlert()
+        a.messageText = "Cut and paste in Finder needs permission"
+        a.informativeText = why
+        a.addButton(withTitle: "Open Accessibility Settings")
+        a.addButton(withTitle: "Later")
+        if a.runModal() == .alertFirstButtonReturn { finderCut.requestPermission() }
+    }
+
+    /// Both fixes go through the same grant, so one item asks for it and both
+    /// pick it up the next time an application comes forward.
+    @objc private func grantPermission() {
+        scroll.requestPermission()
+        finderCut.refresh()
+    }
 
     @objc private func toggleSystem() {
         alsoSystemSleep.toggle()
@@ -503,6 +533,7 @@ final class MenuBarApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         assertion.release()
         clamshell.revertQuietly()          // never leave the lid flag set behind us
         scroll.stop()                      // and never leave a tap on the session
+        finderCut.stop()
         activityPanel?.close()
         NSApp.terminate(nil)
     }
