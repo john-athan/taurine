@@ -1,5 +1,4 @@
 import AppKit
-import CoreGraphics
 
 /// The interpreter. 🌀
 ///
@@ -12,15 +11,9 @@ import CoreGraphics
 /// goes through unhelped. Taurine's main thread waits on `osascript` for the lid
 /// guard, on `NSAlert.runModal`, on menu tracking. Any of those would be enough
 /// to lose the tap. So the tap gets a thread whose run loop does nothing else,
-/// and the callback never touches the main thread or the fixer object.
-///
-/// **The callback reads one number.** The current system setting is cached as an
-/// `Int32` in a heap cell handed to the tap as its `userInfo`. The main thread
-/// stores into it when the setting changes; the tap thread loads it per event.
-/// An aligned 32-bit scalar cannot tear, and the worst outcome of the race is
-/// that one event on the boundary of changing the setting in System Settings
-/// uses the previous answer. That is a better trade than a lock the main thread
-/// could be holding while blocked in a modal dialog.
+/// and the callback never touches the main thread or the fixer object. All of
+/// that lives in `ScrollTap`, which owns the thread and the memory they share;
+/// this type owns the policy, the preference and the words in the menu.
 ///
 /// **Nothing polls.** The setting arrives as a distributed notification. App
 /// activation is used as a second, free chance to notice both a setting change
@@ -28,8 +21,10 @@ import CoreGraphics
 /// is what makes "switch it on in System Settings and come back" work without a
 /// restart or a timer. The badge still reads `0 timers`.
 ///
-/// The trap for the next reader is in `ScrollCorrection.negateDeltas`: the three
-/// delta fields are not independent, and the order of the writes is load bearing.
+/// Two traps for the next reader, and neither is here. The order of the writes
+/// in `ScrollCorrection.negateDeltas` is load bearing, and the order of the
+/// teardown in `ScrollTap.stop` is the difference between a clean stop and a
+/// use-after-free on the tap thread.
 final class ScrollDirectionFixer {
 
     /// What the feature is doing, as far as it can tell.
@@ -56,71 +51,30 @@ final class ScrollDirectionFixer {
 
     private(set) var status: Status = .off
 
-    // MARK: - shared with the tap thread
-
-    /// The only memory the two threads share. Deliberately a plain struct behind
-    /// a raw pointer: the callback must not retain, release, or allocate.
-    private struct TapState {
-        /// 1 when `com.apple.swipescrolldirection` is on. Written by the main
-        /// thread, read once per scroll event.
-        var systemScrollsNaturally: Int32
-        /// The tap itself, unretained, so the callback can re-arm it without
-        /// touching ARC. The fixer holds the strong reference.
-        var tap: UnsafeMutableRawPointer?
-        /// How many times macOS has disabled us and we have come back. Written
-        /// by the tap thread, read by the menu for diagnostics.
-        var reArms: Int32
-    }
-
-    private let shared = UnsafeMutablePointer<TapState>.allocate(capacity: 1)
-
-    /// The whole hot path. One branch, six field reads and six writes at most,
-    /// no allocation, no lock, and no call into this object or the main thread.
-    /// The recovery branch below is the only one that touches ARC, and it runs
-    /// about as often as macOS decides to switch us off.
-    private static let callback: CGEventTapCallBack = { _, type, event, info in
-        guard let info else { return Unmanaged.passUnretained(event) }
-        let shared = info.assumingMemoryBound(to: TapState.self)
-
-        if type == .scrollWheel {
-            ScrollCorrection.apply(to: event,
-                                   systemScrollsNaturally: shared.pointee.systemScrollsNaturally != 0)
-        } else if let port = shared.pointee.tap {
-            // The only other types we can be sent are the two the system uses to
-            // tell us it has switched us off: `.tapDisabledByTimeout` when a
-            // callback took too long, `.tapDisabledByUserInput` under a
-            // secure-input or debugger condition. Both are recoverable by simply
-            // enabling the same port again, on this thread, right now.
-            CGEvent.tapEnable(tap: Unmanaged<CFMachPort>.fromOpaque(port).takeUnretainedValue(),
-                              enable: true)
-            shared.pointee.reArms &+= 1
-        }
-        return Unmanaged.passUnretained(event)
-    }
-
     // MARK: - private state
 
     private let defaults: UserDefaults
     private let key: String
-    private var tap: CFMachPort?
-    private var tapThread: Thread?
-    private var tapRunLoop: CFRunLoop?
+    private var tap: ScrollTap?
     private var observing = false
+
+    /// Re-arms counted by taps that have already been taken down. A tap's own
+    /// counter dies with it, and the diagnostic is meant to answer "has this
+    /// been happening while Taurine has been running", so the total outlives
+    /// any one tap.
+    private var retiredReArms = 0
 
     /// `defaults` and `key` are injectable so tests can drive the real object
     /// without writing to the user's preferences.
     init(defaults: UserDefaults = .standard, key: String = "fixScrollDirection") {
         self.defaults = defaults
         self.key = key
-        shared.initialize(to: TapState(systemScrollsNaturally: 0, tap: nil, reArms: 0))
     }
 
     deinit {
         // Nothing may call back into a half-dead object.
         onStatusChange = nil
         stop()
-        shared.deinitialize(count: 1)
-        shared.deallocate()
     }
 
     // MARK: - the switch
@@ -158,56 +112,17 @@ final class ScrollDirectionFixer {
         guard tap == nil else { return status }
         guard ScrollPermission.isGranted else { return settle(.needsPermission) }
 
-        let mask = CGEventMask(1 << CGEventType.scrollWheel.rawValue)
-        guard let port = CGEvent.tapCreate(tap: .cgSessionEventTap,
-                                           place: .headInsertEventTap,
-                                           options: .defaultTap,
-                                           eventsOfInterest: mask,
-                                           callback: Self.callback,
-                                           userInfo: UnsafeMutableRawPointer(shared))
-        else {
+        let natural = SystemScrollDirection.isNatural
+        switch ScrollTap.arm(systemScrollsNaturally: natural) {
+        case .armed(let armed):
+            tap = armed
+            return settle(.correcting(reversedClass(whenNatural: natural)))
+        case .refused:
             return settle(.blocked("macOS refused Taurine an event tap, even though Accessibility "
                                  + "permission is granted. Quitting and reopening Taurine usually clears this."))
-        }
-
-        let natural = SystemScrollDirection.isNatural
-        shared.pointee.systemScrollsNaturally = natural ? 1 : 0
-        shared.pointee.tap = Unmanaged.passUnretained(port).toOpaque()
-        tap = port
-
-        // The thread publishes its run loop before the semaphore is signalled,
-        // which is also the ordering that makes `tapRunLoop` safe to read here.
-        let ready = DispatchSemaphore(value: 0)
-        let thread = Thread { [weak self] in
-            guard let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, port, 0) else {
-                ready.signal()
-                return
-            }
-            let loop = CFRunLoopGetCurrent()
-            CFRunLoopAddSource(loop, source, .commonModes)
-            CGEvent.tapEnable(tap: port, enable: true)
-            self?.tapRunLoop = loop
-            ready.signal()
-
-            // Returns when `stop()` stops this run loop, and not before.
-            CFRunLoopRun()
-
-            CFRunLoopRemoveSource(loop, source, .commonModes)
-            CFMachPortInvalidate(port)
-        }
-        thread.name = "io.github.john-athan.taurine.scroll"
-        // Every scroll on the machine now waits on this thread. Anything less
-        // than user-interactive invites the timeout that switches the tap off.
-        thread.qualityOfService = .userInteractive
-        thread.start()
-        ready.wait()
-
-        guard tapRunLoop != nil else {
-            disarmTap()
+        case .noRunLoop:
             return settle(.blocked("Taurine could not attach its scroll tap to a run loop."))
         }
-        tapThread = thread
-        return settle(.correcting(reversedClass(whenNatural: natural)))
     }
 
     /// Disarm everything and stop watching. Safe to call twice, safe to call
@@ -221,15 +136,15 @@ final class ScrollDirectionFixer {
     /// Take down the tap and its thread, leaving the observers in place. Used
     /// when the feature is still switched on but cannot currently run, so that
     /// the thing that fixes it (a grant arriving) is still being watched for.
+    ///
+    /// Returns with the tap thread already gone, because `ScrollTap.stop` joins
+    /// it. That is what lets a caller say "the tap is down" and be right.
     private func disarmTap() {
-        // Switch the tap off first, so "off" is true the instant it is asked
-        // for rather than whenever the tap thread next gets scheduled.
-        if let port = tap { CGEvent.tapEnable(tap: port, enable: false) }
-        if let loop = tapRunLoop { CFRunLoopStop(loop) }
-        tap = nil
-        tapThread = nil
-        tapRunLoop = nil
-        shared.pointee.tap = nil
+        guard let tap else { return }
+        tap.stop()
+        // Read after the stop, so nothing can still be counting.
+        retiredReArms += tap.reArmCount
+        self.tap = nil
     }
 
     // MARK: - staying current
@@ -266,9 +181,10 @@ final class ScrollDirectionFixer {
 
     /// Re-read the global setting and hand the new answer to the tap thread.
     private func reloadSystemDirection() {
+        guard let tap else { return }
         let natural = SystemScrollDirection.isNatural
-        shared.pointee.systemScrollsNaturally = natural ? 1 : 0
-        if tap != nil { settle(.correcting(reversedClass(whenNatural: natural))) }
+        tap.setSystemScrollsNaturally(natural)
+        settle(.correcting(reversedClass(whenNatural: natural)))
     }
 
     /// Whichever class disagrees with the system is the one being reversed.
@@ -351,10 +267,14 @@ final class ScrollDirectionFixer {
         }
     }
 
-    /// How many times macOS has disabled the tap and we have re-armed it. Zero
-    /// on a healthy machine; a climbing number means something is stalling the
-    /// tap thread and is worth seeing.
-    var reArmCount: Int { Int(shared.pointee.reArms) }
+    /// How many times macOS has disabled the tap and we have re-armed it, over
+    /// every tap this fixer has armed. Zero on a healthy machine; a climbing
+    /// number means something is stalling the tap thread and is worth seeing.
+    ///
+    /// Taurine switching its own tap off is not counted. It used to be, which
+    /// made the number blame macOS for something Taurine did: see
+    /// `ScrollTap.stop`.
+    var reArmCount: Int { retiredReArms + (tap?.reArmCount ?? 0) }
 
     private var reArmNote: String {
         reArmCount == 0 ? "" : "\nRe-armed \(reArmCount) time(s) after macOS switched the tap off."

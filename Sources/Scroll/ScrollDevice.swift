@@ -48,9 +48,12 @@ struct ScrollTraits: Equatable {
     /// `kCGScrollWheelEventIsContinuous`: pixel-based rather than line-based.
     let isContinuous: Bool
 
-    /// `kCGScrollWheelEventScrollPhase`. Observed on an Apple trackpad:
-    /// 1 began, 2 changed, 4 ended, 128 may-begin (fingers resting). 0 means the
-    /// event is not part of a gesture, which includes every momentum event.
+    /// `kCGScrollWheelEventScrollPhase`. CoreGraphics defines five values:
+    /// 1 began, 2 changed, 4 ended, 8 cancelled, 128 may-begin (fingers
+    /// resting). All but cancelled have been observed on an Apple trackpad
+    /// here; cancelled is listed because it is a phase the classifier must
+    /// treat as a gesture, not because it was seen. 0 means the event is not
+    /// part of a gesture, which includes every momentum event.
     let phase: Int64
 
     /// `kCGScrollWheelEventMomentumPhase`: 1 begin, 2 continue, 3 end. Non-zero
@@ -63,18 +66,30 @@ struct ScrollTraits: Equatable {
         self.momentumPhase = momentumPhase
     }
 
-    /// Read off a live event. Three field reads, no allocation: this runs on the
-    /// tap thread for every scroll event the machine produces.
-    init(of event: CGEvent) {
-        isContinuous = event.getIntegerValueField(.scrollWheelEventIsContinuous) != 0
-        phase = event.getIntegerValueField(Self.scrollPhase)
-        momentumPhase = event.getIntegerValueField(Self.momentumPhase)
+    /// Read off a live event. Three field reads, no allocation, no ARC traffic
+    /// and no lazy-global check: this runs on the tap thread for every scroll
+    /// event the machine produces.
+    ///
+    /// A static function rather than an `init(of:)` on purpose. Swift passes an
+    /// initializer's argument owned, so the initializer form compiled to a
+    /// retain in the caller and a release here, once per event. A function
+    /// parameter is passed guaranteed, and the pair goes away. Verified by
+    /// disassembling the optimised binary, not assumed.
+    static func read(_ event: CGEvent) -> ScrollTraits {
+        ScrollTraits(isContinuous: event.getIntegerValueField(.scrollWheelEventIsContinuous) != 0,
+                     phase: event.getIntegerValueField(scrollPhase),
+                     momentumPhase: event.getIntegerValueField(momentumPhase))
     }
 
     /// `kCGScrollWheelEventScrollPhase`, which CoreGraphics declares in
     /// CGEventTypes.h but does not surface in Swift's `CGEventField`.
-    static let scrollPhase = CGEventField(rawValue: 99)!
+    ///
+    /// Computed rather than `static let`, because a `static let` is a lazy
+    /// global: every read of it carries a one-time-initialisation check, and
+    /// two of those were sitting in the per-event path. As a computed property
+    /// the optimiser folds it to the constant it is.
+    static var scrollPhase: CGEventField { CGEventField(rawValue: 99)! }
 
     /// `kCGScrollWheelEventMomentumPhase`, likewise.
-    static let momentumPhase = CGEventField(rawValue: 123)!
+    static var momentumPhase: CGEventField { CGEventField(rawValue: 123)! }
 }

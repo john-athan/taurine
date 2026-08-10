@@ -32,7 +32,7 @@ enum ScrollCorrection {
     /// flipped case six reads and six writes. No allocation, no locks, no calls
     /// out of the process.
     static func apply(to event: CGEvent, systemScrollsNaturally natural: Bool) {
-        let device = ScrollDevice.classify(ScrollTraits(of: event))
+        let device = ScrollDevice.classify(ScrollTraits.read(event))
         guard mustNegate(device, systemScrollsNaturally: natural) else { return }
         negateDeltas(of: event)
     }
@@ -102,8 +102,14 @@ enum SystemScrollDirection {
 
     /// True when the system is currently scrolling naturally.
     static var isNatural: Bool {
-        // cfprefsd caches; ask it to catch up before reading, since we only ever
-        // read on an event that says the value probably just changed.
+        // cfprefsd caches another process's writes, and this value is only ever
+        // written by another process, so the cache has to be dropped before the
+        // read or a change in System Settings can go unnoticed indefinitely.
+        //
+        // Every caller is an event: the change notification, an app activation,
+        // or a menu about to open. None of them is a loop and none of them is
+        // per-scroll-event, so a round trip to cfprefsd here is affordable. The
+        // tap thread never calls this; it reads the cached Int32.
         CFPreferencesAppSynchronize(kCFPreferencesAnyApplication)
         return interpret(CFPreferencesCopyAppValue(key, kCFPreferencesAnyApplication))
     }

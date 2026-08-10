@@ -39,9 +39,32 @@ func runScrollDirectionTests() {
         }
     }
 
+    Check.suite("classify: a cancelled gesture is still a gesture") {
+        // Phase 8 is kCGScrollPhaseCancelled. It is not in the set observed on
+        // the trackpad here, but CoreGraphics defines it, and a drag that gets
+        // cancelled must not turn into a wheel click halfway through.
+        let d = ScrollDevice.classify(.init(isContinuous: true, phase: 8, momentumPhase: 0))
+        Check.equal(d, .continuousSurface, "phase 8 cancelled is a surface")
+    }
+
     Check.suite("classify: a wheel mouse") {
         let d = ScrollDevice.classify(.init(isContinuous: false, phase: 0, momentumPhase: 0))
         Check.equal(d, .wheel, "no continuity, no phase, no momentum")
+    }
+
+    Check.suite("classify: a mouse behind a vendor driver reads as a surface") {
+        // Not an aspiration, a known limitation, pinned so it cannot change
+        // without somebody noticing. Logitech Options rewrites a wheel mouse's
+        // scroll events to be continuous, which is why UnnaturalScrollWheels
+        // added a second detection mode, and Mos special-cases the Logitech
+        // daemon by process id for the same reason. An event shaped like this
+        // is indistinguishable from a trackpad in the only three fields this
+        // classifier reads, so it is classified as a surface and never
+        // corrected. ADR 0004 records the evidence, what the user sees, and
+        // what they can do about it.
+        let vendorDriven = ScrollTraits(isContinuous: true, phase: 2, momentumPhase: 0)
+        Check.equal(ScrollDevice.classify(vendorDriven), .continuousSurface,
+                    "a wheel mouse behind a vendor driver is not recognised as a wheel")
     }
 
     Check.suite("classify: a Magic Mouse is a mouse and still a surface") {
@@ -63,14 +86,14 @@ func runScrollDirectionTests() {
 
     Check.suite("classify: read off a live event") {
         let e = pixelEvent(vertical: 10, horizontal: 0, phase: 2)
-        let t = ScrollTraits(of: e)
+        let t = ScrollTraits.read(e)
         Check.that(t.isContinuous, "pixel events are continuous")
         Check.equal(t.phase, 2, "phase comes back as written")
         Check.equal(t.momentumPhase, 0, "no momentum on a phase event")
         Check.equal(ScrollDevice.classify(t), .continuousSurface, "and it classifies as a surface")
 
         let wheel = lineEvent(clicks: 1)
-        Check.equal(ScrollDevice.classify(ScrollTraits(of: wheel)), .wheel, "a line event is a wheel")
+        Check.equal(ScrollDevice.classify(ScrollTraits.read(wheel)), .wheel, "a line event is a wheel")
     }
 
     // MARK: - the policy, exhaustively
@@ -86,11 +109,19 @@ func runScrollDirectionTests() {
                    "traditional system, wheel: already right")
     }
 
-    Check.suite("policy: exactly one class is ever corrected") {
-        for natural in [true, false] {
+    Check.suite("policy: exactly one class is corrected, and it is written down which") {
+        // The expected answer is a table here, not a second call to the function
+        // under test. Deriving it from `mustNegate` would agree with any
+        // implementation at all, including one that corrects the wrong class.
+        let expected: [(natural: Bool, corrected: [ScrollDevice])] = [
+            (natural: true,  corrected: [.wheel]),
+            (natural: false, corrected: [.continuousSurface]),
+        ]
+        for row in expected {
             let corrected = [ScrollDevice.continuousSurface, .wheel]
-                .filter { ScrollCorrection.mustNegate($0, systemScrollsNaturally: natural) }
-            Check.equal(corrected.count, 1, "one class corrected when natural == \(natural)")
+                .filter { ScrollCorrection.mustNegate($0, systemScrollsNaturally: row.natural) }
+            Check.equal(corrected, row.corrected,
+                        "natural == \(row.natural) corrects exactly \(row.corrected)")
         }
     }
 
@@ -162,7 +193,7 @@ func runScrollDirectionTests() {
 
     Check.suite("flip: momentum keeps its direction with the gesture") {
         let e = momentumEvent(vertical: 11)
-        Check.equal(ScrollDevice.classify(ScrollTraits(of: e)), .continuousSurface,
+        Check.equal(ScrollDevice.classify(ScrollTraits.read(e)), .continuousSurface,
                     "a momentum event is a surface")
         ScrollCorrection.apply(to: e, systemScrollsNaturally: false)
         Check.equal(e.getIntegerValueField(.scrollWheelEventPointDeltaAxis1), -11,
@@ -290,17 +321,80 @@ func runScrollDirectionTests() {
             Check.that(fixer.label.contains("needs permission"), "the menu says it too")
         }
 
-        Check.equal(fixer.start(), status, "starting twice does not arm a second tap")
-
         Check.equal(fixer.setEnabled(false), .off, "switching off returns to off")
         Check.that(!fixer.isEnabled, "and the choice is persisted")
         Check.isNil(fixer.explanation, "with nothing left to complain about")
+    }
 
-        // The interesting half of the lifecycle: a tap that was really armed on
-        // a run loop on its own thread has to come down again without hanging.
+    Check.suite("fixer: starting again does not arm a second tap") {
+        // The status is not the observable here. `start()` returning the same
+        // `Status` is true of an implementation that arms a fresh tap on a fresh
+        // thread every call, so the thread itself is what gets watched, by
+        // identity rather than by count: a `start()` that tore the tap down and
+        // rebuilt it would keep the count at one and still be wrong.
+        let fixer = ScrollDirectionFixer(defaults: scratchDefaults(), key: "fixScrollDirection")
+        let first = fixer.setEnabled(true)
+        let armed = liveTapThreadIDs()
+
+        if ScrollPermission.isGranted {
+            Check.equal(armed.count, 1, "granted: exactly one tap thread is running")
+        } else {
+            Check.equal(armed.count, 0, "not granted: no tap thread is ever started")
+        }
+
+        Check.equal(fixer.start(), first, "the second start reports the same status")
+        Check.equal(fixer.start(), first, "and so does the third")
+        Check.equal(liveTapThreadIDs(), armed,
+                    "and the tap thread is the same one: none added, none replaced")
+
+        fixer.setEnabled(false)
+    }
+
+    Check.suite("fixer: stop() joins the tap thread, so threads never pile up") {
+        // Asserting `status == .off` proves nothing on its own, because
+        // `settle(.off)` sets it unconditionally whether or not a thread is
+        // still running behind it. What `stop()` actually promises is that it
+        // does not return while the tap thread can still run the callback,
+        // which it keeps by joining.
+        //
+        // The bound is one rather than zero on purpose, and the reason is worth
+        // knowing: the join waits for the thread to leave its run loop and drop
+        // the tap source, which is the whole of the safety property, but the
+        // kernel may still be reaping that pthread for a few microseconds
+        // afterwards. Taurine promises nothing about reaping. Eight is the
+        // number this catches: without the join all eight of these are still
+        // running their run loops at this point, which is exactly what the
+        // teardown this replaced did.
+        var fixers: [ScrollDirectionFixer] = []
+        for _ in 0..<8 {
+            let f = ScrollDirectionFixer(defaults: scratchDefaults(), key: "fixScrollDirection")
+            f.setEnabled(true)
+            f.stop()
+            Check.equal(f.status, .off, "each one reports itself off")
+            fixers.append(f)
+        }
+        Check.that(liveTapThreadIDs().count <= 1,
+                   "eight armed and stopped back to back leave no pile of live tap threads "
+                 + "(saw \(liveTapThreadIDs().count))")
+        for f in fixers { f.setEnabled(false) }
+    }
+
+    Check.suite("fixer: taking the tap down is not counted as a re-arm") {
+        // Disabling a tap makes macOS deliver one last callback on the tap
+        // thread, every time, and that callback's job is to re-arm whatever tap
+        // it finds. Before the teardown was ordered to prevent it, 400 clean
+        // cycles here produced a re-arm count in the tens, and the tooltip
+        // blamed macOS for something Taurine had done to itself.
+        let fixer = ScrollDirectionFixer(defaults: scratchDefaults(), key: "fixScrollDirection")
+        for _ in 0..<40 {
+            fixer.setEnabled(true)
+            fixer.setEnabled(false)
+        }
+        Check.equal(fixer.reArmCount, 0, "40 clean start/stop cycles are not a fault to report")
+        Check.equal(liveTapThreadIDs(), [], "and leave no tap thread behind")
+
         fixer.setEnabled(true)
-        fixer.stop()
-        Check.equal(fixer.status, .off, "stop() takes the tap and its thread down and says so")
+        Check.that(!fixer.tooltip.contains("Re-armed"), "so the tooltip invents no problem")
         fixer.setEnabled(false)
     }
 
@@ -311,6 +405,61 @@ func runScrollDirectionTests() {
         Check.that(!fixer.tooltip.isEmpty, "on: describes what it is doing, or what is wrong")
         fixer.setEnabled(false)
     }
+}
+
+// MARK: - watching the tap thread
+
+/// The thread ids of every live scroll tap thread in this process.
+///
+/// The tap thread is the only outward sign that a tap exists, so it is what the
+/// lifecycle tests observe. Ids rather than a count, because "starting twice
+/// does not arm a second tap" and "there is one tap thread" are different
+/// claims, and only the first one is the promise being made.
+private func liveTapThreadIDs() -> Set<UInt64> {
+    var ports: thread_act_array_t?
+    var count: mach_msg_type_number_t = 0
+    guard task_threads(mach_task_self_, &ports, &count) == KERN_SUCCESS, let ports else { return [] }
+    defer {
+        for i in 0..<Int(count) { mach_port_deallocate(mach_task_self_, ports[i]) }
+        vm_deallocate(mach_task_self_, vm_address_t(UInt(bitPattern: ports)),
+                      vm_size_t(Int(count) * MemoryLayout<thread_t>.size))
+    }
+
+    var found: Set<UInt64> = []
+    for i in 0..<Int(count) where threadName(ports[i]).contains("taurine.scroll") {
+        if let id = threadID(ports[i]) { found.insert(id) }
+    }
+    return found
+}
+
+/// The name `Thread.name` put on the underlying pthread, or "" if it has none.
+private func threadName(_ port: thread_act_t) -> String {
+    var info = thread_extended_info_data_t()
+    var size = mach_msg_type_number_t(MemoryLayout<thread_extended_info_data_t>.size
+                                      / MemoryLayout<natural_t>.size)
+    let ok = withUnsafeMutablePointer(to: &info) {
+        $0.withMemoryRebound(to: integer_t.self, capacity: Int(size)) {
+            thread_info(port, thread_flavor_t(THREAD_EXTENDED_INFO), $0, &size)
+        }
+    }
+    guard ok == KERN_SUCCESS else { return "" }
+    return withUnsafeBytes(of: &info.pth_name) {
+        String(cString: $0.baseAddress!.assumingMemoryBound(to: CChar.self))
+    }
+}
+
+/// The kernel's unique id for a thread. Unlike the mach port name it is never
+/// recycled, so a rebuilt tap thread is always distinguishable from a kept one.
+private func threadID(_ port: thread_act_t) -> UInt64? {
+    var info = thread_identifier_info_data_t()
+    var size = mach_msg_type_number_t(MemoryLayout<thread_identifier_info_data_t>.size
+                                      / MemoryLayout<natural_t>.size)
+    let ok = withUnsafeMutablePointer(to: &info) {
+        $0.withMemoryRebound(to: integer_t.self, capacity: Int(size)) {
+            thread_info(port, thread_flavor_t(THREAD_IDENTIFIER_INFO), $0, &size)
+        }
+    }
+    return ok == KERN_SUCCESS ? info.thread_id : nil
 }
 
 // MARK: - event shapes
