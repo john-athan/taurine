@@ -4,9 +4,9 @@ import Foundation
 ///
 /// Everything here is a pure function over numbers that were captured from a
 /// real machine or invented to be awkward. The awkward ones are the point: a
-/// counter that wraps, a disk that vanishes, a first sample with no baseline,
-/// an interval of zero. Those happen once a week on somebody's Mac and never
-/// while you are watching, so this is the only place they can be checked.
+/// disk that vanishes mid-tick, a USB drive that arrives with a lifetime
+/// counter, an interval of zero. Those happen once a week on somebody's Mac and
+/// never while you are watching, so this is the only place they can be checked.
 func runActivityCountersTests() {
 
     // MARK: - RateCounter
@@ -27,40 +27,19 @@ func runActivityCountersTests() {
         Check.equal(c.advance(to: 100), 80, "second gap")
     }
 
-    Check.suite("rate counter: a counter of unknown width that goes backwards yields nothing") {
+    Check.suite("rate counter: a counter that goes backwards yields nothing") {
         var c = RateCounter()
         _ = c.advance(to: 4_294_967_000)
         Check.isNil(c.advance(to: 12_000), "a reset is not a negative rate and not a spike either")
         Check.equal(c.advance(to: 30_000), 18_000, "and the tick after it measures normally again")
     }
 
-    Check.suite("rate counter: a 32 bit counter that wraps is reconstructed exactly") {
-        var c = RateCounter(modulus: 1 << 32)
-        _ = c.advance(to: 4_294_967_200)          // 96 short of 2^32
-        Check.equal(c.advance(to: 400), 496, "96 to the roll-over plus 400 after it")
-        Check.equal(c.advance(to: 1_400), 1_000, "and the counter carries on normally")
-    }
-
-    Check.suite("rate counter: a wrap reconstruction never exceeds the modulus") {
-        var c = RateCounter(modulus: 1 << 32)
-        _ = c.advance(to: 10)
-        let delta = Check.unwrap(c.advance(to: 5), "an almost-full wrap")
-        Check.that((delta ?? 0) < 1 << 32, "the worst case is one whole turn of the counter, never more")
-        Check.equal(delta, (1 << 32) - 10 + 5, "and it is the exact arithmetic, not a guess")
-    }
-
-    Check.suite("rate counter: a reading beyond the stated modulus is refused") {
-        var c = RateCounter(modulus: 1 << 32)
-        _ = c.advance(to: 1 << 40)
-        Check.isNil(c.advance(to: 5), "a counter wider than we were told is a reset, not a wrap")
-    }
-
-    Check.suite("rate counter: forgetting drops the baseline") {
+    Check.suite("rate counter: a 64 bit counter has room for the whole machine's lifetime") {
         var c = RateCounter()
-        _ = c.advance(to: 500)
-        c.forget()
-        Check.that(!c.hasBaseline, "no baseline survives a close")
-        Check.isNil(c.advance(to: 900), "so the next reading is a baseline again, not a 900 byte spike")
+        // What a 32 bit counter would have rolled over at, twice over.
+        _ = c.advance(to: 8_589_934_592)
+        Check.equal(c.advance(to: 8_589_935_592), 1_000,
+                    "eight gigabytes in is an ordinary reading, not a wrap to reason about")
     }
 
     // MARK: - TrafficLedger
@@ -113,24 +92,17 @@ func runActivityCountersTests() {
         Check.equal(r?.inboundTotal, 1_100, "and it does not inflate the total either")
     }
 
-    Check.suite("ledger: a wrapped source blanks the tick rather than under-reporting it") {
+    Check.suite("ledger: a source that was replaced blanks the tick rather than under-reporting it") {
         var ledger = TrafficLedger<String>()
-        _ = ledger.update(["en0": ByteCounters(inbound: 4_294_000_000, outbound: 10)], over: 0)
-        Check.isNil(ledger.update(["en0": ByteCounters(inbound: 4_000, outbound: 20)], over: 1),
-                    "we cannot tell a wrap from a reset, so we say nothing for one tick")
-        let r = Check.unwrap(ledger.update(["en0": ByteCounters(inbound: 9_000, outbound: 30)], over: 1),
+        _ = ledger.update(["disk0": ByteCounters(inbound: 4_294_000_000, outbound: 10),
+                           "disk1": ByteCounters(inbound: 1_000, outbound: 0)], over: 0)
+        Check.isNil(ledger.update(["disk0": ByteCounters(inbound: 4_000, outbound: 20),
+                                   "disk1": ByteCounters(inbound: 9_000, outbound: 0)], over: 1),
+                    "one source that cannot be trusted taints the whole total, not just its own share")
+        let r = Check.unwrap(ledger.update(["disk0": ByteCounters(inbound: 9_000, outbound: 30),
+                                            "disk1": ByteCounters(inbound: 9_000, outbound: 0)], over: 1),
                              "the tick after recovers")
-        Check.close(r?.inboundBytesPerSecond ?? -1, 5_000, tolerance: 0.001, "measured from the post-wrap baseline")
-    }
-
-    Check.suite("ledger: a ledger told its counter width rides the wrap instead of blanking") {
-        var ledger = TrafficLedger<String>(modulus: 1 << 32)
-        _ = ledger.update(["en0": ByteCounters(inbound: 4_294_967_000, outbound: 0)], over: 0)
-        let r = Check.unwrap(ledger.update(["en0": ByteCounters(inbound: 296, outbound: 0)], over: 1),
-                             "the interface rolled over mid-download")
-        Check.close(r?.inboundBytesPerSecond ?? -1, 592, tolerance: 0.001,
-                    "296 bytes to the roll-over plus 296 after it")
-        Check.equal(r?.inboundTotal, 4_294_967_592, "and the running total steps over the boundary")
+        Check.close(r?.inboundBytesPerSecond ?? -1, 5_000, tolerance: 0.001, "measured from the fresh baseline")
     }
 
     Check.suite("ledger: an interval of zero never divides") {
@@ -299,40 +271,49 @@ func runActivityCountersTests() {
         Check.close(GraphicsProbe.utilization(fromPercent: -3), 0, tolerance: 0.0001, "and undershoots")
     }
 
+    Check.suite("graphics: two accelerators report the busier one, never the mean") {
+        // The number a mean would produce is spelled out in each case, because
+        // averaging is the plausible-looking mistake this rule exists to refuse.
+        Check.close(GraphicsProbe.busiest(of: [0.0, 1.0]) ?? -1, 1.0, tolerance: 0.0001,
+                    "an idle integrated GPU beside a saturated discrete one is 100%, not 50%")
+        Check.close(GraphicsProbe.busiest(of: [0.2, 0.5, 0.8]) ?? -1, 0.8, tolerance: 0.0001,
+                    "three accelerators report the busiest, not 0.5")
+        Check.close(GraphicsProbe.busiest(of: [0.42]) ?? -1, 0.42, tolerance: 0.0001,
+                    "one accelerator is its own maximum")
+        Check.isNil(GraphicsProbe.busiest(of: []), "and no accelerator answering is no reading, not zero")
+    }
+
     // MARK: - which interfaces count
 
     Check.suite("network: loopback never counts") {
-        Check.that(!NetworkProbe.counts(name: "lo0", flags: UInt32(IFF_LOOPBACK | IFF_UP),
-                                        type: UInt8(IFT_LOOP)),
-                   "half a gigabyte of localhost traffic went nowhere")
+        Check.that(!NetworkProbe.counts(flags: UInt32(IFF_LOOPBACK | IFF_UP), type: UInt8(IFT_LOOP)),
+                   "a gigabyte and a half of localhost traffic went nowhere")
     }
 
-    Check.suite("network: tunnels never count, because their bytes are counted underneath them") {
-        Check.that(!NetworkProbe.counts(name: "utun3", flags: UInt32(IFF_POINTOPOINT | IFF_UP), type: 1),
-                   "a VPN tunnel")
-        Check.that(!NetworkProbe.counts(name: "gif0", flags: UInt32(IFF_POINTOPOINT),
-                                        type: UInt8(IFT_GIF)), "a generic tunnel")
+    Check.suite("network: encapsulation never counts, because those bytes ride a real link too") {
+        Check.that(!NetworkProbe.counts(flags: UInt32(IFF_POINTOPOINT | IFF_UP), type: UInt8(IFT_OTHER)),
+                   "utun3, a VPN tunnel, caught by its flag")
+        Check.that(!NetworkProbe.counts(flags: 0, type: UInt8(IFT_GIF)),
+                   "gif0 with no flags at all is still a tunnel, and the type says so")
+        Check.that(!NetworkProbe.counts(flags: 0, type: UInt8(IFT_STF)),
+                   "stf0 carries no flags on this Mac, so only its type can exclude it")
     }
 
-    Check.suite("network: bridges and aggregates never count, by type or by name") {
-        Check.that(!NetworkProbe.counts(name: "en7", flags: 0x8863, type: UInt8(IFT_BRIDGE)),
-                   "a bridge that admits to being one")
-        Check.that(!NetworkProbe.counts(name: "bridge0", flags: 0x8863, type: UInt8(IFT_ETHER)),
-                   "and a bridge that claims to be plain ethernet, which is what this Mac reports")
-        Check.that(!NetworkProbe.counts(name: "bond0", flags: 0x8863, type: UInt8(IFT_IEEE8023ADLAG)),
+    Check.suite("network: bridges, VLANs and aggregates never count") {
+        Check.that(!NetworkProbe.counts(flags: 0x8863, type: UInt8(IFT_BRIDGE)),
+                   "a bridge counts its members' bytes a second time")
+        Check.that(!NetworkProbe.counts(flags: 0x8863, type: UInt8(IFT_IEEE8023ADLAG)),
                    "a link aggregate")
-        Check.that(!NetworkProbe.counts(name: "vlan0", flags: 0x8863, type: UInt8(IFT_L2VLAN)),
+        Check.that(!NetworkProbe.counts(flags: 0x8863, type: UInt8(IFT_L2VLAN)),
                    "a VLAN")
     }
 
     Check.suite("network: real links count, including the awkward ones") {
-        Check.that(NetworkProbe.counts(name: "en0", flags: 0x8863, type: UInt8(IFT_ETHER)),
+        Check.that(NetworkProbe.counts(flags: 0x8863, type: UInt8(IFT_ETHER)),
                    "wifi and ethernet, obviously")
-        Check.that(NetworkProbe.counts(name: "awdl0", flags: 0x8863, type: UInt8(IFT_ETHER)),
-                   "AirDrop shares en0's radio but not its counters")
-        Check.that(NetworkProbe.counts(name: "anpi0", flags: 0x8863, type: UInt8(IFT_ETHER)),
-                   "the link to the co-processors is a real link")
-        Check.that(NetworkProbe.counts(name: "en4", flags: 0, type: UInt8(IFT_ETHER)),
+        Check.that(NetworkProbe.counts(flags: 0x8963, type: UInt8(IFT_ETHER)),
+                   "and one that is also running as a bridge member, which is en1 on this Mac")
+        Check.that(NetworkProbe.counts(flags: 0, type: UInt8(IFT_ETHER)),
                    "a link that is down still counts: it contributes zero, and it may come up mid-session")
     }
 }

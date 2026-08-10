@@ -55,21 +55,12 @@ final class MemoryProbe: ActivityProbe {
 
     /// The five page counts the accounting needs, pulled out of
     /// `vm_statistics64` so the arithmetic can be tested without a kernel.
-    struct PageCounts: Equatable {
+    struct PageCounts {
         var wired: UInt64
         var internalPages: UInt64
         var external: UInt64
         var purgeable: UInt64
         var compressed: UInt64
-
-        init(wired: UInt64, internalPages: UInt64, external: UInt64,
-             purgeable: UInt64, compressed: UInt64) {
-            self.wired = wired
-            self.internalPages = internalPages
-            self.external = external
-            self.purgeable = purgeable
-            self.compressed = compressed
-        }
     }
 
     private var host: host_t = 0
@@ -110,8 +101,15 @@ final class MemoryProbe: ActivityProbe {
         physical = 0
     }
 
+    deinit {
+        // The protocol puts the obligation on the probe. A dropped but unclosed
+        // MemoryProbe would otherwise leak a host send right.
+        close()
+    }
+
     func read(into sample: inout ActivitySample) {
-        // A level, not a rate, so this answers on the first sample too.
+        // A level, not a rate: nothing here is measured against a previous
+        // reading, so there is no baseline for `open()` to take.
         var status: kern_return_t = KERN_SUCCESS
         guard let counts = pages(status: &status), physical > 0 else { return }
         let swap = Self.swapUsage()
@@ -124,7 +122,10 @@ final class MemoryProbe: ActivityProbe {
 
     // MARK: - the kernel calls
 
-    private func pages(status: inout kern_return_t) -> PageCounts? {
+    /// Internal rather than private so a test can hold the five counts up
+    /// against `vm_stat`, which is the only way the field-to-field mapping
+    /// below is checkable at all.
+    func pages(status: inout kern_return_t) -> PageCounts? {
         guard host != 0 else { return nil }
 
         var stats = vm_statistics64_data_t()

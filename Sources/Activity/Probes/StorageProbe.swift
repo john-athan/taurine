@@ -8,8 +8,8 @@ import IOKit
 /// each of those publishes a `Statistics` dictionary of lifetime counters, two
 /// of which are the bytes read and written. `iostat` reads the same numbers.
 /// They cost a registry property fetch, need no entitlement and no root, and
-/// they are cumulative, so this is a rate probe and says nothing on the first
-/// sample of a session.
+/// they are cumulative, so this is a rate probe: it takes its baseline in
+/// `open()` and every sample the panel sees measures a real span of time.
 ///
 /// The design decision worth stating is that the registry is searched again on
 /// every tick rather than once in `open()`. Holding the `io_service_t` objects
@@ -54,8 +54,6 @@ final class StorageProbe: ActivityProbe {
         static let bytesWritten = "Bytes (Write)"      // ...StatisticsBytesWrittenKey
     }
 
-    /// 64 bit counters, so no modulus: a drop can only mean the driver went
-    /// away and came back, which is a reset and gets no rate.
     private var ledger = TrafficLedger<UInt64>()
 
     // MARK: - lifecycle
@@ -66,6 +64,9 @@ final class StorageProbe: ActivityProbe {
         guard let readings = Self.statistics(status: &status), !readings.isEmpty else {
             throw Failure.noBlockStorage(status)
         }
+        // The baseline, so the panel's first frame carries a real rate rather
+        // than an empty tile.
+        _ = ledger.update(readings, over: 0)
     }
 
     func close() {

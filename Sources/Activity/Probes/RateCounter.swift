@@ -4,46 +4,35 @@ import Foundation
 ///
 /// Three of the six probes ask the kernel the same shape of question: give me a
 /// number that only ever goes up, and I will tell you how fast it is going up.
-/// Doing that correctly is four lines and two traps, so it lives here once
+/// Doing that correctly is four lines and one trap, so it lives here once
 /// instead of three times.
 ///
-/// The first trap is the baseline. A cumulative counter carries no information
-/// on its own; the rate is the difference between two readings, so the first
-/// reading of a session is not a measurement at all. Reporting zero for it
-/// would put a fake data point at the left edge of every graph. `advance`
-/// returns nil until it has something to subtract from.
+/// The trap is the baseline. A cumulative counter carries no information on its
+/// own; the rate is the difference between two readings, so the first reading is
+/// not a measurement at all. Reporting zero for it would put a fake data point
+/// at the left edge of every graph. `advance` returns nil until it has something
+/// to subtract from, and every probe that owns one takes that first reading in
+/// `open()`, which is what keeps the nil off the screen.
 ///
-/// The second trap is the counter going backwards, and it has two quite
-/// different causes that need quite different answers:
+/// A counter that goes backwards means exactly one thing: the thing being
+/// counted was replaced. A disk detached and its `IOBlockStorageDriver`
+/// statistics went with it; an interface was destroyed and made again under the
+/// same name. There is no arithmetic that recovers the missing bytes, so the
+/// honest answer is no answer for that one tick.
 ///
-///   • **Wrap.** `if_data.ifi_ibytes`, the interface counter `getifaddrs`
-///     publishes, is `u_int32_t`. Verified on this machine: the field is four
-///     bytes wide, so a link wraps every 4 GiB, which on a gigabit transfer is
-///     every thirty-four seconds. That is not an error, it is arithmetic, and
-///     the true delta is recoverable exactly because the modulus is known.
-///     Pass `modulus: 1 << 32` and a backwards step is read as one wrap.
-///
-///   • **Reset.** A disk detaches and its `IOBlockStorageDriver` statistics go
-///     with it. There is no modulus to reconstruct from, so the only honest
-///     answer is no answer. Leave `modulus` nil and a backwards step reports
-///     nothing for that tick.
-///
-/// The mistake to avoid is picking one behaviour for both. Treating a wrapped
-/// interface as a reset blanks the network tile every half minute under load;
-/// treating a reset disk as a wrap invents four gigabytes of traffic that never
-/// happened. Which one a counter is, is a property of the counter, so the
-/// caller states it.
+/// It used to mean two things, and this type carried a `modulus` to tell them
+/// apart: `if_data.ifi_ibytes`, the interface counter `getifaddrs` publishes, is
+/// `u_int32_t` and rolls over every 4 GiB. Reconstructing that roll-over was
+/// only ever compensation for reading a narrow counter while a wide one existed.
+/// `NetworkProbe` reads the 64 bit counters now, so the second cause is gone and
+/// the parameter went with it.
 struct RateCounter {
-
-    /// The value the counter rolls over at, or nil for a counter wide enough
-    /// that only a reset can send it backwards.
-    let modulus: UInt64?
 
     private var previous: UInt64?
 
-    init(modulus: UInt64? = nil) {
-        self.modulus = modulus
-    }
+    /// Spelled out because the storage is private, which would otherwise make
+    /// the compiler's memberwise initialiser private too.
+    init() {}
 
     /// False until the first reading has been taken.
     var hasBaseline: Bool { previous != nil }
@@ -56,31 +45,16 @@ struct RateCounter {
     @discardableResult
     mutating func advance(to reading: UInt64) -> UInt64? {
         defer { self.previous = reading }
-        guard let last = previous else { return nil }
-        if reading >= last { return reading - last }
-        // Backwards. One wrap of a known modulus is exact arithmetic; more than
-        // one wrap in a single interval (over 4 GiB/s on a 32 bit counter) would
-        // undercount, and nothing on a Mac moves that fast through one link.
-        guard let modulus, last < modulus else { return nil }
-        return (modulus - last) + reading
+        guard let last = previous, reading >= last else { return nil }
+        return reading - last
     }
-
-    /// Drop the baseline, so the next reading is a baseline again. This is what
-    /// `close()` owes the lifecycle contract: a reopened probe must not measure
-    /// against a number from the last time somebody looked.
-    mutating func forget() { previous = nil }
 }
 
 /// One source's pair of cumulative byte counters, named from the machine's
 /// point of view: inbound is read from the device or received from the wire.
-struct ByteCounters: Equatable {
+struct ByteCounters {
     var inbound: UInt64
     var outbound: UInt64
-
-    init(inbound: UInt64, outbound: UInt64) {
-        self.inbound = inbound
-        self.outbound = outbound
-    }
 }
 
 /// The books. 📚
@@ -100,27 +74,26 @@ struct ByteCounters: Equatable {
 /// source that disappears simply stops being asked, and the bytes it already
 /// contributed stay in the running total.
 ///
-/// One source moving backwards with no modulus to explain it taints the whole
-/// tick and the ledger reports nothing, rather than quietly leaving that disk's
-/// traffic out of a number the panel presents as the total.
+/// One source moving backwards taints the whole tick and the ledger reports
+/// nothing, rather than quietly leaving that disk's traffic out of a number the
+/// panel presents as the total.
 struct TrafficLedger<Source: Hashable> {
 
-    private let modulus: UInt64?
     private var counters: [Source: (inbound: RateCounter, outbound: RateCounter)] = [:]
     private var inboundTotal: UInt64 = 0
     private var outboundTotal: UInt64 = 0
     private var seeded = false
 
-    /// `modulus` is handed to every counter in the ledger, because every source
-    /// in one ledger is read through the same kernel interface and therefore
-    /// has the same width.
-    init(modulus: UInt64? = nil) {
-        self.modulus = modulus
-    }
+    /// Spelled out for the same reason as `RateCounter.init`: private storage
+    /// would otherwise hide the compiler's memberwise initialiser.
+    init() {}
 
     /// Fold one tick's readings in. Returns the rate to publish, or nil when
     /// this tick cannot carry one: no baseline yet, no elapsed time, or a
-    /// source that moved backwards inexplicably.
+    /// source that moved backwards.
+    ///
+    /// The probes call this once from `open()` with an interval of zero, which
+    /// is the call that lays down the baseline and seeds the totals.
     mutating func update(_ readings: [Source: ByteCounters],
                          over interval: TimeInterval) -> TrafficRate? {
         let hadBaseline = seeded
@@ -135,8 +108,7 @@ struct TrafficLedger<Source: Hashable> {
         next.reserveCapacity(readings.count)
 
         for (source, reading) in readings {
-            var pair = counters[source]
-                ?? (inbound: RateCounter(modulus: modulus), outbound: RateCounter(modulus: modulus))
+            var pair = counters[source] ?? (inbound: RateCounter(), outbound: RateCounter())
             let known = pair.inbound.hasBaseline
             let deltaIn = pair.inbound.advance(to: reading.inbound)
             let deltaOut = pair.outbound.advance(to: reading.outbound)

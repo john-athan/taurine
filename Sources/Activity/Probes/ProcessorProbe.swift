@@ -6,8 +6,9 @@ import Foundation
 /// each core separately, and it hands back exactly what the scheduler keeps: a
 /// flat array of four tick counters per logical CPU, counted at 100 Hz. There
 /// is no "how busy is this core" call anywhere in public API; there is only the
-/// difference between two of these arrays, which is why this probe is a rate
-/// probe and reports nothing at all on the first sample of a session.
+/// difference between two of these arrays, which is why this probe takes its
+/// first reading in `open()` and has something to subtract from by the time the
+/// panel asks.
 ///
 /// Three traps sit in this one call.
 ///
@@ -24,8 +25,9 @@ import Foundation
 ///     are rebound to `natural_t` before anything looks at them.
 ///
 ///   • `mach_host_self()` adds a send right every time it is called. Calling it
-///     once per tick leaks port rights slowly; the port is taken in `open()`,
-///     deallocated in `close()`, and the panel's lifecycle does the rest.
+///     once per tick leaks port rights slowly; the port is taken in `open()`
+///     and deallocated in `close()`, with `deinit` covering a probe that was
+///     dropped rather than closed.
 ///
 /// Cores arrive in logical CPU order, which `CPUTopology` already knows how to
 /// cut into clusters, so this probe measures and hands the shape question to
@@ -49,20 +51,15 @@ final class ProcessorProbe: ActivityProbe {
     }
 
     /// One logical CPU's four counters, in the order the kernel writes them.
-    /// `natural_t` is 32 bits wide and wraps after roughly 497 days of uptime
-    /// per core, which is handled rather than assumed away.
+    /// `natural_t` is 32 bits wide, so a counter rolls over after roughly 497
+    /// days of that core being in one state. A roll-over is not reconstructed:
+    /// it is detected, and the tick it lands in reports nothing, which costs one
+    /// dropped frame every 497 days and no arithmetic anybody has to trust.
     struct CoreTicks: Equatable {
         var user: natural_t
         var system: natural_t
         var idle: natural_t
         var nice: natural_t
-
-        init(user: natural_t, system: natural_t, idle: natural_t, nice: natural_t) {
-            self.user = user
-            self.system = system
-            self.idle = idle
-            self.nice = nice
-        }
     }
 
     private var host: host_t = 0
@@ -78,14 +75,16 @@ final class ProcessorProbe: ActivityProbe {
         guard port != 0 else { throw Failure.noHostPort }
         host = port
 
-        // Deliberately no baseline reading here. The baseline has to be taken at
-        // the same instant the sample's clock is read, or the second sample of a
-        // session divides by an interval it did not actually measure over.
-        var probe: kern_return_t = KERN_SUCCESS
-        if ticks(status: &probe) == nil {
+        // The baseline, so the panel's first frame carries a real CPU reading
+        // rather than an empty tile. `ActivityMonitor` starts its clock right
+        // after this returns and takes the first sample a quarter of a second
+        // later, which is the span these ticks will be measured over.
+        var status: kern_return_t = KERN_SUCCESS
+        guard let baseline = ticks(status: &status) else {
             close()
-            throw Failure.kernel(probe)
+            throw Failure.kernel(status)
         }
+        previous = baseline
     }
 
     func close() {
@@ -96,13 +95,19 @@ final class ProcessorProbe: ActivityProbe {
         previous = []
     }
 
+    deinit {
+        // The protocol puts the obligation on the probe, not on whoever holds
+        // it. `ActivityMonitor` always closes, but a probe dropped by anything
+        // else would otherwise leak a host send right per cycle.
+        close()
+    }
+
     func read(into sample: inout ActivitySample) {
         var status: kern_return_t = KERN_SUCCESS
         guard let current = ticks(status: &status) else { return }
         defer { previous = current }
 
-        guard sample.interval > 0,
-              let cores = Self.busy(from: previous, to: current),
+        guard let cores = Self.busy(from: previous, to: current),
               let clusters = Self.clusters(from: cores, topology: CPUTopology.current)
         else { return }
 
@@ -168,6 +173,10 @@ final class ProcessorProbe: ActivityProbe {
         fractions.reserveCapacity(current.count)
 
         for (was, now) in zip(previous, current) {
+            // Backwards means one of these 32 bit counters rolled over, which
+            // takes 497 days in one state. The reading is dropped rather than
+            // reconstructed: one blank frame every 497 days is cheaper than
+            // arithmetic that can only ever be tested against itself.
             guard now.user >= was.user, now.system >= was.system,
                   now.idle >= was.idle, now.nice >= was.nice else { return nil }
 

@@ -9,10 +9,9 @@ import IOKit
 /// figure over its last internal window, as an integer percentage. `iStat` and
 /// `Activity Monitor`'s GPU history read the same property.
 ///
-/// Because it is a level and not a counter, this probe answers on the first
-/// sample of a session, where the CPU, disk and network tiles are still blank.
-/// That asymmetry is deliberate and is the whole point of `interval == 0`
-/// meaning "no baseline": a level needs no history, a rate does.
+/// Because it is a level and not a counter, this probe has no baseline to take
+/// in `open()`: the driver's window is the driver's business, and asking twice
+/// would not make the answer better.
 ///
 /// Two decisions worth stating.
 ///
@@ -22,10 +21,8 @@ import IOKit
 ///     it. Matching the family means the probe does not carry a list of chip
 ///     names that goes stale every autumn.
 ///
-///   • When more than one accelerator answers, the highest utilisation wins
-///     rather than the mean. A Mac with an idle integrated GPU and a saturated
-///     discrete one is at 100% of the thing doing the work, and averaging it
-///     down to 50% would describe neither piece of hardware.
+///   • When more than one accelerator answers, the busiest wins rather than the
+///     mean. `busiest(of:)` is where that rule lives and why.
 ///
 /// The trap is the percentage itself: it is the driver's average over a window
 /// that is not our sampling interval, and it occasionally reports above 100
@@ -35,13 +32,20 @@ final class GraphicsProbe: ActivityProbe {
 
     let name = "graphics"
 
+    /// Two failures, not one with a shared payload. The registry refusing to
+    /// run the match has a `kern_return_t` worth printing; an iterator that ran
+    /// and found nothing has only `KERN_SUCCESS` to offer, and "(0)" in an error
+    /// message tells the reader nothing.
     enum Failure: Error, CustomStringConvertible {
-        case noAccelerator(kern_return_t)
+        case matchFailed(kern_return_t)
+        case noAccelerator
 
         var description: String {
             switch self {
-            case .noAccelerator(let code):
-                return "No IOAccelerator service could be matched (\(code))."
+            case .matchFailed(let code):
+                return "IOAccelerator could not be matched (\(code))."
+            case .noAccelerator:
+                return "No IOAccelerator service is present."
             }
         }
     }
@@ -68,7 +72,7 @@ final class GraphicsProbe: ActivityProbe {
                                                   IOServiceMatching("IOAccelerator"),
                                                   &iterator)
         guard status == KERN_SUCCESS, iterator != IO_OBJECT_NULL else {
-            throw Failure.noAccelerator(status)
+            throw Failure.matchFailed(status)
         }
         defer { IOObjectRelease(iterator) }
 
@@ -78,7 +82,7 @@ final class GraphicsProbe: ActivityProbe {
             service = IOIteratorNext(iterator)
         }
 
-        guard !accelerators.isEmpty else { throw Failure.noAccelerator(status) }
+        guard !accelerators.isEmpty else { throw Failure.noAccelerator }
     }
 
     func close() {
@@ -86,14 +90,16 @@ final class GraphicsProbe: ActivityProbe {
         accelerators = []
     }
 
+    deinit {
+        // The protocol puts the obligation on the probe. A dropped but unclosed
+        // GraphicsProbe would otherwise leak one io_object per accelerator.
+        close()
+    }
+
     func read(into sample: inout ActivitySample) {
-        var busiest: Double?
-        for service in accelerators {
-            guard let percent = Self.utilizationPercent(of: service) else { continue }
-            let value = Self.utilization(fromPercent: percent)
-            busiest = max(busiest ?? value, value)
-        }
-        guard let busiest else { return }
+        let readings = accelerators.compactMap(Self.utilizationPercent(of:))
+            .map(Self.utilization(fromPercent:))
+        guard let busiest = Self.busiest(of: readings) else { return }
         // frequencyMHz stays nil: it comes from IOReport's state residency
         // counters, which are a different probe's business entirely.
         sample.gpu = GPUActivity(utilization: busiest, frequencyMHz: nil)
@@ -113,5 +119,13 @@ final class GraphicsProbe: ActivityProbe {
     /// A driver percentage turned into the `0...1` fraction the sample carries.
     static func utilization(fromPercent percent: Int) -> Double {
         min(1, max(0, Double(percent) / 100))
+    }
+
+    /// The aggregation rule, pulled out of `read` so it can be stated once and
+    /// tested. The busiest accelerator wins, never the mean: a Mac with an idle
+    /// integrated GPU and a saturated discrete one is at 100% of the thing doing
+    /// the work, and 50% would describe neither piece of hardware.
+    static func busiest(of utilizations: [Double]) -> Double? {
+        utilizations.max()
     }
 }

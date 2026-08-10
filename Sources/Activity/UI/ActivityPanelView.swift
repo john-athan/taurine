@@ -21,12 +21,13 @@ import Cocoa
 /// than in a document nobody reads.
 ///
 /// The trap: this view never resizes itself. `preferredHeight` is what the
-/// popover should be, and the controller sets it. The height genuinely changes
-/// once per session, one second after opening, when the rate probes get their
-/// first interval and the disk and network tiles appear; every tile is sticky
-/// after that, so the second change never comes. A view that resized its own
-/// window on every sample would be a panel that twitched for as long as it was
-/// open.
+/// popover should be, and the controller sets it. Because every probe takes its
+/// baseline when it opens, the first sample already carries rates, so the set of
+/// tiles is settled on the first frame and the height never changes again
+/// within a session. Tiles are sticky as well, which means a probe that starts
+/// failing part way through keeps its last value rather than collapsing the
+/// panel around the gap. A view that resized its own window on every sample
+/// would be a panel that twitched for as long as it was open.
 final class ActivityPanelView: NSView {
 
     private let header = ActivityHeaderView()

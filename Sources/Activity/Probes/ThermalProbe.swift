@@ -28,7 +28,7 @@ final class ThermalProbe: ActivityProbe {
     func close() {}
 
     func read(into sample: inout ActivitySample) {
-        // A level, so it answers on the first sample like memory and the GPU.
+        // A level, so there is no baseline for `open()` to have taken.
         sample.thermal = ThermalActivity(state: ProcessInfo.processInfo.thermalState)
     }
 }
