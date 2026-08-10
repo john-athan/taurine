@@ -25,7 +25,7 @@ import Foundation
 /// is not the rare case, it is every measured case. Rather than declare the cut
 /// dead, the ledger keeps it claimable until a copy lands and pins it to that
 /// pasteboard the first time it looks, so the loose claim covers a keystroke or
-/// two rather than the whole life of the cut. The ⌘C rule in `FinderCutPolicy`
+/// two rather than the whole life of the cut. The ⌘C rule in `FinderKeyPolicy`
 /// is what stops the claim from stealing somebody else's copy: a copy typed in
 /// Finder forgets the cut before its pasteboard ever exists.
 ///
@@ -115,6 +115,12 @@ enum FinderCutLedger {
             return now != cut.before
                 ? PendingCut(before: cut.before, pending: now, awaitingCopy: false)
                 : cut
+
+        case .trashInstead, .openInstead, .renameInstead:
+            // The other two fixes on the shelf. Trashing a file, opening one or
+            // renaming one leaves the pasteboard alone, so a cut made before
+            // any of them is still the cut it was.
+            return cut
 
         case .moveInstead:
             // Deliberately unchanged. A cut lasts exactly as long as the

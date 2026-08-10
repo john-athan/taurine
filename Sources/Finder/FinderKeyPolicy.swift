@@ -1,50 +1,72 @@
 import Carbon.HIToolbox
 import CoreGraphics
 
-/// The verdict. ✂️
+/// The verdict, for all three Finder keys. ✂️🗑️↩️
 ///
-/// Finder has always had the *move* half of cut and paste. It is called "Move
-/// Item Here", it lives in the Edit menu behind the Option key, and it works on
-/// whatever the last Copy put on the pasteboard. What Finder does not have is
-/// the pair of keystrokes everybody's hands already know, so this fix does not
-/// implement moving files at all. It rewrites two keystrokes into the two
-/// Finder already answers:
+/// Finder answers a set of keystrokes that nobody's hands know, and ignores the
+/// ones they do. Every fix here is the same shape: **no new behaviour is
+/// implemented, a keystroke is rewritten into one Finder already answers.**
 ///
 ///     ⌘X  →  ⌘C     copy, and remember that a cut is pending
 ///     ⌘V  →  ⌥⌘V    Move Item Here, if that cut is still the pasteboard
+///     ⌫   →  ⌘⌫     move the selection to the Trash
+///     ⏎   →  ⌘O     open the selection
+///     ⌘⏎  →  ⏎      rename, which is where ⏎ used to be
 ///
-/// Finder does the work, which is the whole point: the progress sheet, the
-/// "an item with that name already exists" dialog, the authentication prompt for
-/// a folder you do not own, and Undo all come from Finder, because from Finder's
-/// side nothing unusual has happened. Taurine copies no file and deletes no
-/// file. It cannot lose your data because it never handles it.
+/// Finder does the work, which is the whole point: the progress sheet, the "an
+/// item with that name already exists" dialog, the authentication prompt for a
+/// folder you do not own, the Trash, and Undo all come from Finder, because
+/// from Finder's side nothing unusual has happened. Taurine copies no file,
+/// moves no file and deletes no file. It cannot lose your data because it never
+/// handles it.
 ///
 /// The rewrite is done to the event in place, in the same style as the scroll
 /// fix: no keystroke is swallowed and none is synthesised, so there is no
 /// synthetic event to feed back into our own tap and no unmatched key-up left
 /// behind. Key-down and key-up are rewritten alike, so an application sees a
-/// balanced ⌘C press even though a ⌘X was typed.
+/// balanced press of whatever it was turned into.
 ///
-/// **Why a character *and* a key code.** A key code is a position on the
-/// keyboard; a character is what that position produces under the layout in
-/// force. Rewriting X into C is only meaningful when the two agree, which they
-/// do on QWERTY, QWERTZ, AZERTY and Colemak, all of which keep ZXCV where IBM
-/// put them, and on "Dvorak - Qwerty ⌘", which restores those positions while
-/// Command is held for exactly this reason. Requiring both to match means that
-/// on a layout where they disagree (plain Dvorak, most obviously) the rule does
-/// not fire and the feature does nothing, rather than firing and sending Finder
-/// a keystroke nobody pressed.
-enum FinderCutPolicy {
+/// **Why the letters check a character *and* a key code, and the other keys do
+/// not.** A key code is a position on the keyboard; a character is what that
+/// position produces under the layout in force. Rewriting X into C is only
+/// meaningful when the two agree, which they do on QWERTY, QWERTZ, AZERTY and
+/// Colemak, all of which keep ZXCV where IBM put them, and on "Dvorak - Qwerty
+/// ⌘", which restores those positions while Command is held for exactly this
+/// reason. Requiring both to match means that on a layout where they disagree
+/// (plain Dvorak, most obviously) the rule does not fire and the fix does
+/// nothing, rather than firing and sending Finder a keystroke nobody pressed.
+///
+/// ⌫ and ⏎ have no such ambiguity. They are not letters, no layout moves them,
+/// and they produce the same character everywhere, so their rules are written
+/// on the key code alone and they work on every layout including plain Dvorak.
+enum FinderKeyPolicy {
 
-    /// What to do about one keystroke. Pure, and the only place the rule lives.
+    /// What to do about one keystroke. Pure, and the only place the rules live.
     ///
-    /// `editingText` is what keeps this out of the way of renaming a file: in a
-    /// text field ⌘X really does mean cut this text, and Finder handles it
-    /// perfectly well, so nothing here applies. `cutIsPending` is the caller's
-    /// answer to "is the pasteboard still the one our cut put there", which
-    /// needs the pasteboard and so cannot be decided in here.
-    static func decide(_ key: KeyPress, editingText: Bool, cutIsPending: Bool) -> FinderKeyAction {
-        guard !editingText else { return .passThrough }
+    /// `surface` is what keeps this out of the way of renaming a file, and the
+    /// two halves of the shelf read it differently on purpose: see
+    /// `FinderSurface`. `cutIsPending` is the caller's answer to "is the
+    /// pasteboard still the one our cut put there", which needs the pasteboard
+    /// and so cannot be decided in here.
+    static func decide(_ key: KeyPress, on surface: FinderSurface,
+                       enabled: FinderFixSet, cutIsPending: Bool) -> FinderKeyAction {
+
+        // ── ⌫ and ⏎. Both demand a positive "a list of files is focused", so
+        // an unanswered probe, a modal sheet, a text field and anything else
+        // Finder can focus all leave these keys exactly as they are today.
+        if surface == .fileList {
+            if enabled.contains(.deleteKey), key.chord == .bare, key.keyCode == Int64(kVK_Delete) {
+                return .trashInstead
+            }
+            if enabled.contains(.returnKey), key.isReturn {
+                if key.chord == .bare { return .openInstead }
+                if key.chord == .command { return .renameInstead }
+            }
+        }
+
+        // ── ⌘X, ⌘C, ⌘V. Unchanged, including the part where anything other
+        // than a text field is good enough.
+        guard enabled.contains(.cutAndPaste), surface != .text else { return .passThrough }
 
         // The cut itself. Rewritten on the way down and on the way up, so the
         // press an application sees is a balanced one.
@@ -81,9 +103,9 @@ enum FinderCutPolicy {
     }
 
     /// Carry out a decision on the event itself. Separate from `decide` so the
-    /// rule can be tested without an event and the rewrite can be tested without
-    /// a pasteboard, and because this is the only code in Taurine that changes
-    /// what key an application thinks you pressed.
+    /// rules can be tested without an event and the rewrites can be tested
+    /// without a pasteboard, and because this is the only code in Taurine that
+    /// changes what key an application thinks you pressed.
     static func apply(_ action: FinderKeyAction, to event: CGEvent) {
         switch action {
         case .passThrough, .forgetTheCut:
@@ -115,11 +137,34 @@ enum FinderCutPolicy {
             // event's flags, not the state of the physical keyboard, so this is
             // the whole of turning Paste into Move Item Here.
             event.flags.insert(.maskAlternate)
+
+        case .trashInstead:
+            // Same trick, one modifier over: Finder's File menu has "Move to
+            // Trash" on ⌘⌫ and nothing at all on ⌫, which is the shape of this
+            // whole shelf. Verified against a real Finder: a ⌫ with Command
+            // inserted, nobody holding Command, moved the file to the Trash.
+            event.flags.insert(.maskCommand)
+
+        case .openInstead:
+            // Return carries no layout ambiguity, so unlike the cut there is no
+            // question of the character disagreeing with the key code; and
+            // unlike the cut, the character left behind is "\r" while the key
+            // code now says O, which AppKit resolves the same way it resolved
+            // "x" against C.
+            event.setIntegerValueField(.keyboardEventKeycode, value: Int64(kVK_ANSI_O))
+            event.flags.insert(.maskCommand)
+
+        case .renameInstead:
+            // The one rewrite that takes a modifier away rather than adding
+            // one. ⌘⏎ is unbound in Finder (checked against the live menu bar,
+            // every menu), so this moves rename onto a free key rather than
+            // over somebody else's.
+            event.flags.remove(.maskCommand)
         }
     }
 }
 
-/// The four answers, in the order the rule considers them.
+/// The answers, in the order the rules consider them.
 enum FinderKeyAction: Equatable {
 
     /// Not ours. The event goes to Finder exactly as it arrived.
@@ -128,14 +173,41 @@ enum FinderKeyAction: Equatable {
     /// ⌘X becomes ⌘C, and a cut is now pending.
     case copyInstead
 
-    /// ⌘V becomes ⌥⌘V, and the pending cut is spent.
+    /// ⌘V becomes ⌥⌘V, and the pending cut does the moving.
     case moveInstead
 
     /// Passed through untouched, but whatever cut was pending no longer is.
     case forgetTheCut
+
+    /// ⌫ becomes ⌘⌫.
+    case trashInstead
+
+    /// ⏎ becomes ⌘O.
+    case openInstead
+
+    /// ⌘⏎ becomes a plain ⏎, which is where renaming used to live.
+    case renameInstead
 }
 
-/// One keystroke, reduced to the four things the rule is allowed to look at.
+/// Which of the Finder fixes are switched on.
+///
+/// One tap serves all of them, so the set has to reach the tap thread. An
+/// `OptionSet` over a `UInt8` is a plain scalar, which is what lets it live in
+/// the shared cell next to the pending cut with no reference for the callback
+/// to retain or release.
+struct FinderFixSet: OptionSet, Equatable {
+    let rawValue: UInt8
+    init(rawValue: UInt8) { self.rawValue = rawValue }
+
+    static let cutAndPaste = FinderFixSet(rawValue: 1 << 0)
+    static let deleteKey   = FinderFixSet(rawValue: 1 << 1)
+    static let returnKey   = FinderFixSet(rawValue: 1 << 2)
+
+    static let none: FinderFixSet = []
+    static let all: FinderFixSet = [.cutAndPaste, .deleteKey, .returnKey]
+}
+
+/// One keystroke, reduced to the four things the rules are allowed to look at.
 ///
 /// Split out from `CGEvent` so the decision can be tested over keystrokes and
 /// layouts this machine cannot produce, and so the tap callback reads a fixed,
@@ -163,16 +235,22 @@ struct KeyPress: Equatable {
         self.chord = chord
     }
 
-    /// Both halves have to agree. See the note on layouts in `FinderCutPolicy`.
+    /// Both halves have to agree. See the note on layouts in `FinderKeyPolicy`.
     func `is`(_ character: UnicodeScalar, _ keyCode: Int) -> Bool {
         self.keyCode == Int64(keyCode) && self.character == character
+    }
+
+    /// Return, or the Enter key on a numeric keypad, which Finder treats alike.
+    /// No character is consulted: no layout moves these keys.
+    var isReturn: Bool {
+        keyCode == Int64(kVK_Return) || keyCode == Int64(kVK_ANSI_KeypadEnter)
     }
 
     /// Read off a live event, on the tap thread.
     ///
     /// The character is fetched into a stack buffer and compared as a scalar, so
-    /// nothing here allocates a `String`: this runs for every ⌘X, ⌘C, ⌘V and
-    /// Escape typed in Finder, and while none of those is a hot path, a heap
+    /// nothing here allocates a `String`: this runs for every ⌘X, ⌘C, ⌘V, ⌫, ⏎
+    /// and Escape typed in Finder, and while none of those is a hot path, a heap
     /// allocation on a tap thread is a habit worth not having.
     static func read(_ event: CGEvent) -> KeyPress {
         var length = 0

@@ -14,7 +14,8 @@ final class MenuBarApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let battery = Battery()
     private let clamshell = ClamshellGuard()
     private let scroll = ScrollDirectionFixer()
-    private let finderCut = FinderCutPaste()
+    private let finder = FinderFixes()
+    private let pastePlain = PastePlainText()
     private var hotkey: Hotkey?
 
     /// Built on first use and never before: a Mac whose owner never asks what
@@ -65,7 +66,8 @@ final class MenuBarApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var diagItem: NSMenuItem!
     private var chargeItem: NSMenuItem!
     private var scrollItem: NSMenuItem!
-    private var finderCutItem: NSMenuItem!
+    private var finderItems: [(FinderFix, NSMenuItem)] = []
+    private var pasteItem: NSMenuItem!
     private var permissionItem: NSMenuItem!
 
     // MARK: - lifecycle
@@ -88,10 +90,12 @@ final class MenuBarApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
 
         // Things Apple got wrong: give every pointing device the scroll
-        // direction it should have had, and let ⌘X mean cut in Finder. Both are
-        // no-ops unless the user switched them on.
+        // direction it should have had, and give Finder the three keys everyone
+        // else's file manager has. No-ops unless the user switched them on. The
+        // paste shortcut is not started because there is nothing to start: it
+        // is a preference, already in force or already gone.
         scroll.startIfEnabled()
-        finderCut.startIfEnabled()
+        finder.startIfEnabled()
 
         // Let the CLI (`taurine on/off/toggle`) drive us.
         listenForCLI()
@@ -106,7 +110,7 @@ final class MenuBarApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         assertion.release()
         clamshell.revertQuietly()
         scroll.stop()
-        finderCut.stop()
+        finder.stop()
         activityPanel?.close()
     }
 
@@ -251,11 +255,16 @@ final class MenuBarApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         menu.addItem(.separator())
 
-        // Things Apple got wrong. Both entries need the same permission, so
-        // there is one item to go and get it, shown when either is waiting.
+        // Things Apple got wrong. All but the last need the same permission,
+        // so there is one item to go and get it, shown when any is waiting.
         let wrongMenu = NSMenu()
         scrollItem = add(wrongMenu, scroll.label, #selector(toggleScrollFix))
-        finderCutItem = add(wrongMenu, finderCut.label, #selector(toggleFinderCut))
+        for fix in FinderFix.allCases {
+            let it = add(wrongMenu, finder.label(for: fix), #selector(toggleFinderFix(_:)))
+            it.representedObject = FinderFix.allCases.firstIndex(of: fix)
+            finderItems.append((fix, it))
+        }
+        pasteItem = add(wrongMenu, pastePlain.label, #selector(togglePastePlain))
         permissionItem = add(wrongMenu, "Grant Accessibility permission…", #selector(grantPermission))
         let wrongItem = NSMenuItem(title: "Things Apple got wrong", action: nil, keyEquivalent: "")
         wrongItem.submenu = wrongMenu
@@ -298,12 +307,16 @@ final class MenuBarApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
             scrollItem.title = scroll.label
             scrollItem.state = scroll.isEnabled ? .on : .off
             scrollItem.toolTip = scroll.tooltip
-            finderCut.refresh()
-            finderCutItem.title = finderCut.label
-            finderCutItem.state = finderCut.isEnabled ? .on : .off
-            finderCutItem.toolTip = finderCut.tooltip
-            // One fix-it item for both, carrying whichever complaint is live.
-            let complaint = scroll.explanation ?? finderCut.explanation
+            finder.refresh()
+            for (fix, item) in finderItems {
+                item.title = finder.label(for: fix)
+                item.state = finder.isEnabled(fix) ? .on : .off
+                item.toolTip = finder.tooltip(for: fix)
+            }
+            pasteItem.state = pastePlain.isEnabled ? .on : .off
+            pasteItem.toolTip = pastePlain.tooltip
+            // One fix-it item for all of them, carrying whichever complaint is live.
+            let complaint = scroll.explanation ?? finder.explanation
             permissionItem.isHidden = complaint == nil
             permissionItem.toolTip = complaint
             return
@@ -444,23 +457,37 @@ final class MenuBarApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if a.runModal() == .alertFirstButtonReturn { scroll.requestPermission() }
     }
 
-    /// Same story for the Finder fix, and the same one place to explain it.
-    @objc private func toggleFinderCut() {
-        finderCut.setEnabled(!finderCut.isEnabled)
-        guard let why = finderCut.explanation else { return }
+    /// Same story for each Finder fix, and the same one place to explain it.
+    @objc private func toggleFinderFix(_ sender: NSMenuItem) {
+        guard let index = sender.representedObject as? Int,
+              index < FinderFix.allCases.count else { return }
+        let fix = FinderFix.allCases[index]
+        finder.setEnabled(fix, !finder.isEnabled(fix))
+        guard let why = finder.explanation else { return }
         let a = NSAlert()
-        a.messageText = "Cut and paste in Finder needs permission"
+        a.messageText = "\(fix.label) needs permission"
         a.informativeText = why
         a.addButton(withTitle: "Open Accessibility Settings")
         a.addButton(withTitle: "Later")
-        if a.runModal() == .alertFirstButtonReturn { finderCut.requestPermission() }
+        if a.runModal() == .alertFirstButtonReturn { finder.requestPermission() }
     }
 
-    /// Both fixes go through the same grant, so one item asks for it and both
-    /// pick it up the next time an application comes forward.
+    /// The one fix on the shelf with nothing to arm: it writes the key
+    /// equivalent System Settings would write, and applications read it when
+    /// they next start. Say so, because otherwise it looks like it did nothing.
+    @objc private func togglePastePlain() {
+        let on = !pastePlain.isEnabled
+        pastePlain.setEnabled(on)
+        Toast.shared.play(on ? Bull.run : Bull.stop, near: statusItem.button,
+                          tint: NSColor(calibratedRed: 0.36, green: 0.72, blue: 0.42, alpha: 1),
+                          caption: on ? "⇧⌘V, after each app restarts" : "⇧⌘V back to normal")
+    }
+
+    /// Every tap fix goes through the same grant, so one item asks for it and
+    /// they all pick it up the next time an application comes forward.
     @objc private func grantPermission() {
         scroll.requestPermission()
-        finderCut.refresh()
+        finder.refresh()
     }
 
     @objc private func toggleSystem() {
@@ -533,7 +560,7 @@ final class MenuBarApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         assertion.release()
         clamshell.revertQuietly()          // never leave the lid flag set behind us
         scroll.stop()                      // and never leave a tap on the session
-        finderCut.stop()
+        finder.stop()
         activityPanel?.close()
         NSApp.terminate(nil)
     }

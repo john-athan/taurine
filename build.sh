@@ -9,8 +9,9 @@ BIN="$APP/Contents/MacOS/taurine"
 echo "▸ compiling…"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS"
-# Sources/ is grouped by subsystem (App, Awake, Charge, Activity, Scroll), so the
-# file list is gathered rather than globbed. Sorted, so a build is reproducible.
+# Sources/ is grouped by subsystem (App, Awake, Charge, Activity, Scroll, Finder,
+# Paste), so the file list is gathered rather than globbed. Sorted, so a build
+# is reproducible.
 SOURCES=()
 while IFS= read -r f; do SOURCES+=("$f"); done < <(find Sources -name '*.swift' | sort)
 swiftc -O -o "$BIN" "${SOURCES[@]}" \
@@ -24,13 +25,13 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
   <key>CFBundleName</key><string>Taurine</string>
   <key>CFBundleDisplayName</key><string>Taurine</string>
   <key>CFBundleIdentifier</key><string>io.github.john-athan.taurine</string>
-  <key>CFBundleVersion</key><string>1.3.1</string>
-  <key>CFBundleShortVersionString</key><string>1.3.1</string>
+  <key>CFBundleVersion</key><string>1.4.0</string>
+  <key>CFBundleShortVersionString</key><string>1.4.0</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleExecutable</key><string>taurine</string>
   <key>LSUIElement</key><true/>
   <key>LSMinimumSystemVersion</key><string>13.0</string>
-  <key>NSHumanReadableCopyright</key><string>MIT — no affiliation with any energy drink.</string>
+  <key>NSHumanReadableCopyright</key><string>MIT. Not affiliated with or endorsed by Apple Inc. No affiliation with any energy drink either.</string>
 </dict>
 </plist>
 PLIST

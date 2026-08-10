@@ -1,7 +1,7 @@
 # 6. ⌘X in Finder means cut, by rewriting two keys rather than moving any files
 
 Date: 2026-08-10
-Status: accepted
+Status: accepted, extended by ADR 7
 
 ## Context
 
@@ -88,10 +88,13 @@ anything, Taurine asks Finder what it has focused and passes the keystroke
 straight through if it is a text field, a text area or a combo box, which covers
 renaming, the search field and Get Info's comments box. That is an Accessibility
 question with a 50 ms messaging timeout, asked only for ⌘X, ⌘C and ⌘V, and
-measured here at 38 µs.
+measured here at 38 µs. (Remeasured for ADR 7, which asks more of it: 92 µs for
+an answer that stops at the role, 133 µs for one that walks to the parent too.)
 
 It fails open: a question that cannot be answered is treated as "not text" and
-the rewrite goes ahead. The other way round, a feature that quietly stops
+the rewrite goes ahead. (ADR 7 gives that probe a third answer, for the sake of
+two keys that can throw something away. Nothing about the cut's reading of it
+changes, for the reason that follows.) The other way round, a feature that quietly stops
 working whenever a probe fails is one nobody can file a bug about; this way
 round the failure is ⌘X copying instead of cutting inside a rename box, which is
 visible, harmless and undone with ⌘Z.

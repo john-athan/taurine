@@ -110,7 +110,7 @@ The menu gives you:
 | **What is this Mac doing?** | The activity panel: cores, GPU, watts, memory, disk, network. Costs nothing until you open it. |
 | *(the badge)* | `45.2 MB · 0 timers · 0 sockets`, read live from the kernel every time the menu opens. Not a claim, a measurement. |
 | **Charge limit** | Stop charging at 60–90% to spare the cell. One admin prompt to install, then free forever. |
-| **Things Apple got wrong** | Small fixes the system should have shipped. Currently: scroll direction per device, and ⌘X / ⌘V to cut and paste files in Finder. |
+| **Things Apple got wrong** | Small fixes the system should have shipped. Currently: scroll direction per device; ⌘X / ⌘V to cut and paste files in Finder; ⌫ to move files to the Trash; ↩ to open them; and ⇧⌘V to paste as plain text in every application. |
 | **Also prevent system sleep** | Not just the display — the whole machine (for long jobs). |
 | **Keep awake with lid closed (AC only)** | Off by default — a closed lid sleeps normally. On, and only while awake + plugged in, Taurine holds the lid open too (`pmset disablesleep`, needs admin). Reverts on unplug, toggle-off, or quit. |
 | **Auto-off under 20% on battery** | The conscience. Won't drain your laptop overnight. |
@@ -204,6 +204,43 @@ there is nothing that could see you typing. The evidence, the measurements and
 the cases where it declines to act are in
 [ADR 6](docs/adr/0006-cut-and-paste-in-finder.md).
 
+**⌫ moves files to the Trash.** In Finder the Delete key does nothing. Not
+something surprising: nothing at all. The command is there, on ⌘⌫, and the key
+your hand reaches for is inert. Switch this on and ⌫ becomes ⌘⌫, so Finder puts
+the selection in the Trash with its own confirmation, its own password prompt for
+files you don't own, and ⌘Z to bring them back. Nothing is deleted and nothing is
+in Taurine's hands.
+
+Because this key can throw something away, it is careful in a way the cut fix is
+not. It fires only when Finder positively reports a list of files: a rename
+field, a search box, a dialog, or **any question Finder fails to answer** all
+leave ⌫ exactly as it is today. One surprise worth knowing before you switch it
+on: with the sidebar focused, ⌘⌫ removes a favourite rather than a file, and this
+cannot tell the two lists apart.
+
+**↩ opens instead of renaming, and ⌘↩ renames.** Finder is the only file manager
+where Return renames. Switch this on and ↩ becomes ⌘O; renaming moves to ⌘↩,
+which Finder leaves unbound. Inside a rename field ↩ still commits the name. This
+one is taste rather than a mistake, which is why it is its own switch.
+
+Both of these share the tap and the permission with the cut fix, and both are
+laid out with their measurements in
+[ADR 7](docs/adr/0007-finders-other-two-keys.md).
+
+**⇧⌘V pastes as plain text everywhere.** Chrome, Firefox, VS Code and Slack put
+"paste without formatting" on ⇧⌘V. Pages, Keynote, Mail, Notes, Safari and
+TextEdit put the same command on ⌥⇧⌘V. So the shortcut works or doesn't
+depending on which window is in front.
+
+This one uses **no tap and no permission**. macOS can already override a menu
+item's shortcut by title, for every application at once, and that is what System
+Settings writes when you add an App Shortcut by hand. Taurine writes the same
+entry, in English and in German, and merges rather than replacing, so anything
+you bound yourself is left alone and switching off leaves the preference exactly
+as it was found. Applications pick it up the next time they start. Why a
+preference beats a system-wide keyboard tap, and what it does not cover, is in
+[ADR 8](docs/adr/0008-one-shortcut-for-pasting-plain-text.md).
+
 ---
 
 ## Charge limit 🔋
@@ -261,11 +298,18 @@ moment it exits — great in front of a long build or upload.
 
 Decisions worth writing down live in [docs/adr](docs/adr/README.md): why there
 is no package manager, why the activity panel costs nothing while it is closed,
-why power comes from IOReport rather than `powermetrics`, and why scroll
-direction belongs to the device.
+why power comes from IOReport rather than `powermetrics`, why scroll direction
+belongs to the device, and why one of the keyboard fixes deliberately uses a
+system preference instead of a keyboard tap.
 
 ---
 
 ## License
 
-MIT — see [LICENSE](LICENSE). Do what you like; keep the notice.
+MIT, see [LICENSE](LICENSE). Do what you like; keep the notice.
+
+Taurine is not affiliated with, authorised by, or endorsed by Apple Inc. Apple,
+macOS and Finder are trademarks of Apple Inc., used here only to say which
+system this software runs on and which parts of it these fixes address.
+"Things Apple got wrong" is the author's opinion about product design. No
+affiliation with any energy drink is claimed either.

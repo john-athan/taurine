@@ -12,3 +12,5 @@ decided, and what it costs.
 | [4](0004-scroll-direction-belongs-to-the-device.md) | Scroll direction belongs to the device, not to the Mac |
 | [5](0005-read-the-counters-the-kernel-keeps-wide.md) | Read the counters the kernel keeps wide |
 | [6](0006-cut-and-paste-in-finder.md) | ⌘X in Finder means cut, by rewriting two keys rather than moving any files |
+| [7](0007-finders-other-two-keys.md) | Finder's other two keys, and a probe that had to start failing the other way |
+| [8](0008-one-shortcut-for-pasting-plain-text.md) | One shortcut for pasting plain text, written as a preference rather than tapped |
