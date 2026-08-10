@@ -12,6 +12,10 @@ func runEnergyArithmeticTests() {
         pairs.map { IOReportBridge.Residency(name: $0.0, ticks: $0.1) }
     }
 
+    func fold(_ pairs: [(String, Int64)], _ frequenciesMHz: [Double]) -> EnergyArithmetic.Fold? {
+        EnergyArithmetic.fold(states: states(pairs), frequenciesMHz: frequenciesMHz)
+    }
+
     Check.suite("energy: unit labels this Mac actually reports") {
         // All three appear in one group on an M4 Pro: mJ for the CPU, nJ for
         // the GPU, uJ for the PCIe ports.
@@ -49,6 +53,33 @@ func runEnergyArithmeticTests() {
         Check.isNil(EnergyArithmetic.watts(energy: 500, unit: "mJ", over: -1), "a clock that went backwards")
     }
 
+    Check.suite("energy: the four channels the panel can name, and nothing beside them") {
+        func domain(_ channel: String) -> EnergyArithmetic.EnergyDomain? {
+            EnergyArithmetic.energyDomain(ofChannel: channel)
+        }
+
+        Check.equal(domain("CPU Energy"), .processor, "the processor's roll-up")
+        Check.equal(domain("GPU"), .graphicsCoarse, "graphics in millijoules")
+        Check.equal(domain("GPU Energy"), .graphicsFine, "and in nanojoules, which wins where both exist")
+        Check.equal(domain("ANE"), .neural, "the Neural Engine")
+        Check.equal(domain("DIE_1_ANE"), .neural, "an Ultra's second die pays into the same total")
+
+        // The SRAM sibling is how this chip names a domain's static RAM, and it
+        // is a channel of its own: GPU and GPU SRAM both exist here. Counting
+        // one as the other doubles a tile and the headline number with it.
+        Check.isNil(domain("GPU SRAM"), "a domain's SRAM sibling is not that domain")
+        Check.isNil(domain("ANE SRAM"), "not for the Neural Engine either")
+        Check.isNil(domain("ANE0"), "nor is an indexed spelling we have never seen")
+
+        // The three levels the processor is published at, of which only the
+        // top one is a total.
+        Check.isNil(domain("EACC_CPU"), "the efficiency cluster is already inside CPU Energy")
+        Check.isNil(domain("EACC_CPU0"), "and so is one of its cores")
+        Check.isNil(domain("EACC_CPU_SRAM"), "and that core's static RAM")
+        Check.isNil(domain("PCPU1DTL412"), "a per-core detail channel is not a total either")
+        Check.isNil(domain("PCIe Port 0 Energy"), "and neither is a port")
+    }
+
     Check.suite("energy: the die prefix comes off before the name is matched") {
         Check.equal(EnergyArithmetic.withoutDiePrefix("DIE_1_CPU Energy"), "CPU Energy", "an Ultra's second die")
         Check.equal(EnergyArithmetic.withoutDiePrefix("DIE_0_GPU Energy"), "GPU Energy", "an Ultra's first die")
@@ -60,66 +91,84 @@ func runEnergyArithmeticTests() {
     Check.suite("residency: a cluster that ran half the interval") {
         // The shape an M4 Pro efficiency core reports: two rest states first,
         // then one operating point per entry in voltage-states1-sram.
-        let fold = EnergyArithmetic.fold(
-            states: states([("DOWN", 0), ("IDLE", 500), ("V0P1", 100), ("V1P0", 400)]),
-            frequenciesMHz: [1000, 2000])
-        Check.close(fold.activeResidency ?? -1, 0.5, tolerance: 1e-12, "half the ticks were operating ticks")
+        let half = fold([("DOWN", 0), ("IDLE", 500), ("V0P1", 100), ("V1P0", 400)], [1000, 2000])
+        Check.close(half?.activeResidency ?? -1, 0.5, tolerance: 1e-12, "half the ticks were operating ticks")
         // Weighted over the active ticks only: (100·1000 + 400·2000) / 500.
-        Check.close(fold.frequencyMHz ?? -1, 1800, tolerance: 1e-9, "residency-weighted mean while running")
+        Check.close(half?.frequencyMHz ?? -1, 1800, tolerance: 1e-9, "residency-weighted mean while running")
     }
 
     Check.suite("residency: a cluster that never woke up") {
-        let fold = EnergyArithmetic.fold(
-            states: states([("DOWN", 800), ("IDLE", 200), ("V0P1", 0), ("V1P0", 0)]),
-            frequenciesMHz: [1000, 2000])
-        Check.equal(fold.activeResidency, 0, "zero residency is a number, and it is zero")
-        Check.isNil(fold.frequencyMHz, "there is no average frequency of nothing")
+        let asleep = fold([("DOWN", 800), ("IDLE", 200), ("V0P1", 0), ("V1P0", 0)], [1000, 2000])
+        Check.equal(asleep?.activeResidency, 0, "zero residency is a number, and it is zero")
+        Check.isNil(asleep?.frequencyMHz, "there is no average frequency of nothing")
     }
 
     Check.suite("residency: power-gated time counts against the interval") {
         // DOWN is a core the scheduler switched off, not a core that was busy.
-        let fold = EnergyArithmetic.fold(
-            states: states([("DOWN", 900), ("IDLE", 0), ("V0P0", 100)]),
-            frequenciesMHz: [3000])
-        Check.close(fold.activeResidency ?? -1, 0.1, tolerance: 1e-12, "one tick in ten")
-        Check.close(fold.frequencyMHz ?? -1, 3000, tolerance: 1e-9, "and it ran flat out for that tick")
+        let gated = fold([("DOWN", 900), ("IDLE", 0), ("V0P0", 100)], [3000])
+        Check.close(gated?.activeResidency ?? -1, 0.1, tolerance: 1e-12, "one tick in ten")
+        Check.close(gated?.frequencyMHz ?? -1, 3000, tolerance: 1e-9, "and it ran flat out for that tick")
     }
 
     Check.suite("residency: the GPU rests in OFF, not IDLE") {
-        let fold = EnergyArithmetic.fold(
-            states: states([("OFF", 750), ("P1", 250), ("P2", 0)]),
-            frequenciesMHz: [338, 618])
-        Check.close(fold.activeResidency ?? -1, 0.25, tolerance: 1e-12, "a quarter of the interval")
-        Check.close(fold.frequencyMHz ?? -1, 338, tolerance: 1e-9, "at the bottom of its table")
+        let graphics = fold([("OFF", 750), ("P1", 250), ("P2", 0)], [338, 618])
+        Check.close(graphics?.activeResidency ?? -1, 0.25, tolerance: 1e-12, "a quarter of the interval")
+        Check.close(graphics?.frequencyMHz ?? -1, 338, tolerance: 1e-9, "at the bottom of its table")
+    }
+
+    Check.suite("residency: a rest state we cannot name is answered with silence") {
+        // The failure this exists to prevent: a chip whose rest state is called
+        // something else has every one of its ticks counted as work, and every
+        // cluster then reads busy to three decimal places. Nothing downstream
+        // could tell that from a Mac that really was pinned.
+        let unknown = fold([("SLEEP", 900), ("V0", 100)], [3000])
+        Check.isNil(unknown, "a channel whose first state is not a rest state we know reads as nothing")
+
+        let mixed = fold([("IDLE", 500), ("V0", 400), ("DOWN", 100)], [3000])
+        Check.isNil(mixed, "and so does one that goes back to resting after it has started working")
+
+        let restOnly = fold([("DOWN", 700), ("IDLE", 300)], [])
+        Check.equal(restOnly?.activeResidency, 0, "a channel that only ever rested is still a reading, of zero")
+
+        Check.isNil(EnergyArithmetic.fold(states: [], frequenciesMHz: [1000]),
+                    "a channel that reported no states at all has nothing to divide")
     }
 
     Check.suite("residency: a table that does not fit is refused") {
-        let mismatched = EnergyArithmetic.fold(
-            states: states([("IDLE", 100), ("V0", 100), ("V1", 100), ("V2", 100)]),
-            frequenciesMHz: [1000, 2000])
-        Check.close(mismatched.activeResidency ?? -1, 0.75, tolerance: 1e-12,
+        let mismatched = fold([("IDLE", 100), ("V0", 100), ("V1", 100), ("V2", 100)], [1000, 2000])
+        Check.close(mismatched?.activeResidency ?? -1, 0.75, tolerance: 1e-12,
                     "residency survives, it needs no table")
-        Check.isNil(mismatched.frequencyMHz, "but a misaligned table produces no frequency at all")
+        Check.isNil(mismatched?.frequencyMHz, "but a misaligned table produces no frequency at all")
 
-        let tableless = EnergyArithmetic.fold(
-            states: states([("IDLE", 500), ("V0", 500)]), frequenciesMHz: [])
-        Check.close(tableless.activeResidency ?? -1, 0.5, tolerance: 1e-12, "same on a Mac with no voltage-states")
-        Check.isNil(tableless.frequencyMHz, "and still no invented number")
-
-        let empty = EnergyArithmetic.fold(states: [], frequenciesMHz: [1000])
-        Check.isNil(empty.activeResidency, "a channel that reported nothing has no residency either")
+        let tableless = fold([("IDLE", 500), ("V0", 500)], [])
+        Check.close(tableless?.activeResidency ?? -1, 0.5, tolerance: 1e-12, "same on a Mac with no voltage-states")
+        Check.isNil(tableless?.frequencyMHz, "and still no invented number")
     }
 
     Check.suite("residency: cores add up before they divide") {
         // Two cores of one cluster, one busy and one asleep. Averaging their
         // percentages would say 50%; summing their ticks says 50% too, but the
         // frequency has to come only from the core that actually ran.
-        let busy = EnergyArithmetic.fold(states: states([("IDLE", 0), ("V0", 1000)]), frequenciesMHz: [4000])
-        let asleep = EnergyArithmetic.fold(states: states([("IDLE", 1000), ("V0", 0)]), frequenciesMHz: [4000])
+        let busy = fold([("IDLE", 0), ("V0", 1000)], [4000]) ?? EnergyArithmetic.Fold()
+        let asleep = fold([("IDLE", 1000), ("V0", 0)], [4000]) ?? EnergyArithmetic.Fold()
         let cluster = busy + asleep
         Check.close(cluster.activeResidency ?? -1, 0.5, tolerance: 1e-12, "half the cluster's ticks were work")
         Check.close(cluster.frequencyMHz ?? -1, 4000, tolerance: 1e-9,
                     "the sleeping core does not drag the frequency down")
+    }
+
+    Check.suite("residency: one core without a frequency takes the cluster's with it") {
+        // The same busy core, beside one whose states did not line up against
+        // any table. Carrying the survivor's weighted total over both cores'
+        // active ticks would report this cluster at 2000 MHz, which is a
+        // frequency neither core ran at.
+        let weighed = fold([("IDLE", 0), ("V0", 1000)], [4000]) ?? EnergyArithmetic.Fold()
+        let unweighed = fold([("IDLE", 0), ("V0", 500), ("V1", 500)], [4000]) ?? EnergyArithmetic.Fold()
+        Check.isNil(unweighed.frequencyMHz, "the second core has no frequency of its own")
+        Check.isNil((weighed + unweighed).frequencyMHz, "so the cluster has none either, in that order")
+        Check.isNil((unweighed + weighed).frequencyMHz, "and in the other")
+        Check.close((weighed + unweighed).activeResidency ?? -1, 1, tolerance: 1e-12,
+                    "while the residency, which needs no table, survives")
     }
 
     Check.suite("channels: the three shapes IOReport uses for a core") {

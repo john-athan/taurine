@@ -20,22 +20,29 @@ import Foundation
 ///     the retain we were handed is the one ARC releases.
 ///   • `IOReportCreateSubscription` *also* writes a dictionary into its third
 ///     argument, and that one is +1 too. It is easy to miss because nothing
-///     ever reads it. Measured here it comes back with a retain count of two,
-///     one of which is ours, so it is released on the spot. Handing that
-///     argument a null pointer is not an option: the function writes through it
-///     unconditionally.
-///   • Every `…Get…` accessor is +0. The unit labels come back with the
-///     immortal-constant retain count (0x0FFFFFFFFFFFFFFF), and two million
-///     calls to the channel-name accessor moved the process footprint by less
-///     than a byte per call. Neither is released.
+///     ever reads it. Read through a raw function pointer, so that ARC never
+///     touches the object and cannot inflate the answer, it comes back with a
+///     retain count of one: ours, and nobody else's. So it is released on the
+///     spot. Handing that argument a null pointer is not an option: the
+///     function writes through it unconditionally.
+///   • Every `…Get…` accessor is +0. The unit labels are immortal constants
+///     (retain count 0x7FFFFFFFFFFFFFFF, and 0x0FFFFFFFFFFFFFFF for the empty
+///     one the unlabelled channels share). The channel names are not: they are
+///     ordinary strings the channel dictionary owns, and two million calls to
+///     that accessor left one of them at a retain count of 2 and moved the
+///     process footprint by zero bytes. Neither kind is released.
 ///   • The subscription handle is a CoreFoundation object even though its type
-///     is opaque, so `CFRelease` is how it goes back.
+///     is opaque, so `CFRelease` is how it goes back. It also costs the task
+///     exactly one mach port name, which is the handle the leak tests pull on:
+///     twenty live subscriptions are twenty extra names, and releasing them
+///     puts the count back where it started, to the name.
 ///
-/// The other trap is scale. This Mac publishes just under ten thousand
-/// channels, and sampling all of them means building a ten-thousand entry
-/// dictionary twice per tick. The subscription is therefore filtered down to
-/// the handful of groups the panel needs before it is ever created, which is
-/// the difference between a millisecond and a great deal more than that.
+/// The other trap is scale. This Mac publishes more than ten thousand channels
+/// (10,365 of them one minute and 10,367 the next), and sampling all of them
+/// means building a ten-thousand entry dictionary twice per tick. The
+/// subscription is therefore filtered down to the handful of groups the panel
+/// needs before it is ever created: a sample and a delta over all of them takes
+/// 110 ms, and over the 293 the panel actually reads, 4.
 final class IOReportBridge {
 
     // MARK: - what can go wrong
@@ -44,6 +51,7 @@ final class IOReportBridge {
         case libraryMissing
         case symbolMissing(String)
         case noChannelLegend
+        case legendNotCopied
         case nothingMatched
         case subscriptionRefused
         case sampleRefused
@@ -56,6 +64,8 @@ final class IOReportBridge {
                 return "libIOReport on this macOS has no \(name)."
             case .noChannelLegend:
                 return "IOReport published no channel legend."
+            case .legendNotCopied:
+                return "CoreFoundation would not allocate a filtered copy of the channel legend."
             case .nothingMatched:
                 return "IOReport publishes none of the channels the power tile needs."
             case .subscriptionRefused:
@@ -121,7 +131,14 @@ final class IOReportBridge {
         typealias CreateSamples = @convention(c) (UnsafeRawPointer, CFMutableDictionary, CFTypeRef?) -> Unmanaged<CFDictionary>?
         typealias CreateDelta = @convention(c) (CFDictionary, CFDictionary, CFTypeRef?) -> Unmanaged<CFDictionary>?
         typealias ChannelText = @convention(c) (CFDictionary) -> Unmanaged<CFString>?
-        typealias ChannelInteger = @convention(c) (CFDictionary, Int32) -> Int64
+        /// The second argument is an out-parameter, not an index. Handed a
+        /// pointer it writes eight bytes through it and returns the counter
+        /// anyway; handed null it just returns the counter, which is all this
+        /// side of the app has any use for. Typing it as an integer would be a
+        /// loaded gun: the callee dereferences whatever those sixty-four bits
+        /// hold. `IOReportStateGetResidency` below, whose second argument
+        /// really is a state index, is the one that takes an `Int32`.
+        typealias ChannelInteger = @convention(c) (CFDictionary, UnsafeMutableRawPointer?) -> Int64
         typealias StateCount = @convention(c) (CFDictionary) -> Int32
         typealias StateText = @convention(c) (CFDictionary, Int32) -> Unmanaged<CFString>?
         typealias StateInteger = @convention(c) (CFDictionary, Int32) -> Int64
@@ -184,8 +201,10 @@ final class IOReportBridge {
     /// The filtered legend. Handed to every `createSamples` call, so it has to
     /// outlive the subscription. ARC owns it.
     private let channels: CFMutableDictionary
-    /// Opaque, CoreFoundation-managed, released by hand in `deinit`.
-    private var subscription: UnsafeRawPointer?
+    /// Opaque, CoreFoundation-managed, released by hand in `deinit`. Assigned
+    /// once and never cleared, so there is no state in which a bridge exists
+    /// without one.
+    private let subscription: UnsafeRawPointer
 
     // MARK: - opening and closing
 
@@ -202,13 +221,13 @@ final class IOReportBridge {
             throw Failure.noChannelLegend
         }
         guard let wanted = CFDictionaryCreateMutableCopy(kCFAllocatorDefault, 0, legend) else {
-            throw Failure.noChannelLegend
+            throw Failure.legendNotCopied
         }
 
         guard let keep = withUnsafePointer(to: kCFTypeArrayCallBacks, {
             CFArrayCreateMutable(kCFAllocatorDefault, 0, $0)
         }) else {
-            throw Failure.noChannelLegend
+            throw Failure.legendNotCopied
         }
         for index in 0..<CFArrayGetCount(published) {
             guard let entry = CFArrayGetValueAtIndex(published, index) else { continue }
@@ -239,18 +258,15 @@ final class IOReportBridge {
     deinit {
         // Swift hides `CFRelease` behind ARC, and the subscription is the one
         // CoreFoundation object here that ARC never saw. `Unmanaged.release()`
-        // is the same decrement under a different name.
-        if let subscription {
-            Unmanaged<AnyObject>.fromOpaque(subscription).release()
-            self.subscription = nil
-        }
+        // is the same decrement under a different name, and it is what gives
+        // the task its mach port name back.
+        Unmanaged<AnyObject>.fromOpaque(subscription).release()
     }
 
     // MARK: - reading
 
     /// Read every subscribed counter as it stands right now.
     func snapshot() throws -> Snapshot {
-        guard let subscription else { throw Failure.sampleRefused }
         guard let dictionary = fn.createSamples(subscription, channels, nil)?.takeRetainedValue() else {
             throw Failure.sampleRefused
         }
@@ -279,9 +295,10 @@ final class IOReportBridge {
         return items
     }
 
-    /// The single accumulated number on a simple counter channel.
+    /// The single accumulated number on a simple counter channel. The
+    /// accessor's out-parameter is declined: the number is the return value.
     func integerValue(of item: Item) -> Int64 {
-        fn.integerValue(item.raw, 0)
+        fn.integerValue(item.raw, nil)
     }
 
     /// Per-state residency on a state channel, in the channel's own tick unit,

@@ -22,14 +22,15 @@ import Foundation
 /// the channel is the only authority, and an unfamiliar label produces no
 /// reading at all rather than a reading that is off by a million.
 ///
-/// **Opening is the expensive part.** A tick costs about five milliseconds on
-/// an M4 Pro, which is the budget ADR 0002 assumed. `open()` costs about
-/// seventy-five, nearly all of it inside IOReport's own channel enumeration:
-/// every entry point into that library walks the whole IO registry gathering
-/// legends, and asking for three named groups one at a time measures slower
-/// than asking for all ten thousand channels once and throwing most away. There
-/// is nothing to optimise on this side of the call, so the cost belongs to
-/// whoever decides which thread `open()` happens on.
+/// **Opening is the expensive part.** A tick costs between four and five
+/// milliseconds on this M4 Pro, which is the budget ADR 0002 assumed. `open()`
+/// costs eighty-five to ninety, nearly all of it inside IOReport's own channel
+/// enumeration: every entry point into that library walks the whole IO registry
+/// gathering legends, and asking for the three groups one at a time with
+/// `IOReportCopyChannelsInGroup` measures at 229 ms against 77 for asking for
+/// all ten thousand channels once and throwing most away. There is nothing to
+/// optimise on this side of the call, so the cost belongs to whoever decides
+/// which thread `open()` happens on.
 ///
 /// **`packageWatts` stays nil, on purpose.** This chip publishes no
 /// package-level energy channel: it publishes `CPU Energy`, `GPU Energy`,
@@ -43,10 +44,10 @@ final class EnergyProbe: ActivityProbe {
 
     let name = "energy"
 
-    /// IOReport's own names for the slices we subscribe to. Everything else on
-    /// this Mac (some nine and a half thousand channels, from Wi-Fi scan
-    /// counters to spill buffer histograms) is left alone, which is what keeps
-    /// a tick down to a couple of milliseconds.
+    /// IOReport's own names for the slices we subscribe to. That leaves ten
+    /// thousand-odd other channels alone, from Wi-Fi scan counters to spill
+    /// buffer histograms, which is what keeps a tick down to the four or five
+    /// milliseconds it costs to sample the 293 we do want.
     private enum Group {
         static let energy = "Energy Model"
         static let cpuStats = "CPU Stats"
@@ -76,21 +77,41 @@ final class EnergyProbe: ActivityProbe {
 
     // MARK: - lifecycle
 
+    /// Subscribe, read the frequency tables, and take the baseline the first
+    /// tick measures against.
+    ///
+    /// Every step that can throw works on a local, and the probe's own state is
+    /// assigned only once all of them have come back. That ordering is the
+    /// whole point: `ActivityMonitor` drops a probe whose `open()` threw
+    /// without ever calling `close()` on it, so a probe that assigned its
+    /// subscription and then threw would hold that subscription, and its mach
+    /// port, for as long as the monitor held the probe. Here a throw releases
+    /// the local on the way out and leaves the probe exactly as it found it.
     func open() throws {
         let bridge = try IOReportBridge(subscribingTo: [
             .init(Group.energy),
             .init(Group.cpuStats, Group.cpuCoreStates),
             .init(Group.gpuStats, Group.gpuStates),
         ])
+        let baseline = try bridge.snapshot()
+        let tables = VoltageStates.read()
+
+        close()
         self.bridge = bridge
-        self.voltageStates = VoltageStates.read()
-        self.previous = try bridge.snapshot()
+        self.previous = baseline
+        self.voltageStates = tables
     }
 
     /// Gives back the subscription, the baseline snapshot and every cached
     /// table. Safe twice: everything here is either nil already or assigned nil
     /// again. After this the probe holds no CoreFoundation object at all, which
     /// is the promise on the menu badge.
+    ///
+    /// There is no `deinit` beside this, because there is nothing for one to
+    /// do. Every field below is ARC's, and the subscription that is not lives
+    /// inside `IOReportBridge`, which releases it in a deinit of its own. A
+    /// probe that is simply dropped therefore gives back exactly what a closed
+    /// one does, and the test that says so is not taking anybody's word for it.
     func close() {
         previous = nil
         bridge = nil
@@ -98,8 +119,6 @@ final class EnergyProbe: ActivityProbe {
         clusterFrequencies = [:]
         gpuFrequencies = nil
     }
-
-    deinit { close() }
 
     // MARK: - reading
 
@@ -130,11 +149,15 @@ final class EnergyProbe: ActivityProbe {
                 energy.absorb(item, from: bridge, over: elapsed)
 
             case (Group.cpuStats, Group.cpuCoreStates):
-                guard let cluster = EnergyArithmetic.clusterChannel(forCoreChannel: item.channel) else { continue }
                 let states = bridge.residencies(of: item)
-                let table = frequencies(for: cluster, states: states)
-                let fold = EnergyArithmetic.fold(states: states, frequenciesMHz: table)
-                clusters[cluster] = (clusters[cluster] ?? EnergyArithmetic.Fold()) + fold
+                guard let cluster = EnergyArithmetic.clusterChannel(forCoreChannel: item.channel),
+                      let fold = EnergyArithmetic.fold(states: states,
+                                                       frequenciesMHz: frequencies(for: cluster, states: states))
+                else { continue }
+                // The first core of a cluster *is* the running total. Seeding
+                // with an empty fold would be seeding with a fold that has no
+                // frequency, and a missing frequency poisons the sum.
+                clusters[cluster] = clusters[cluster].map { $0 + fold } ?? fold
 
             case (Group.gpuStats, Group.gpuStates) where item.channel == Group.gpuChannel:
                 let states = bridge.residencies(of: item)
@@ -156,38 +179,31 @@ final class EnergyProbe: ActivityProbe {
 
     /// The energy channels we know how to name, summed across dies.
     ///
-    /// Matching is on the channel name with any `DIE_n_` prefix removed, and it
-    /// is exact rather than fuzzy for a reason: the same group also carries
-    /// `EACC_CPU`, `PACC0_CPU` and `EACC_CPU0`, which are the cluster and
-    /// per-core counters that `CPU Energy` already rolls up. A prefix match on
-    /// "CPU" would count this chip's processor three times over.
+    /// Which channel counts as what is `EnergyArithmetic.energyDomain`'s
+    /// business, and the note there is worth reading before adding a fifth: the
+    /// group nests, so a name matched loosely counts the same watts twice.
     private struct EnergyTotals {
         var cpu: Double?
-        /// The `GPU Energy` channel, nanojoules on this Mac. A million counts
-        /// to the millijoule channel's one, which matters at an idle draw of
-        /// thirty milliwatts.
         var gpuFine: Double?
-        /// The plain `GPU` channel, millijoules, and the fallback on a chip
-        /// that publishes no finer one.
         var gpuCoarse: Double?
         var ane: Double?
 
         mutating func absorb(_ item: IOReportBridge.Item, from bridge: IOReportBridge, over seconds: TimeInterval) {
-            let channel = EnergyArithmetic.withoutDiePrefix(item.channel)
-            guard channel == "CPU Energy" || channel == "GPU Energy" || channel == "GPU"
-                    || channel.hasPrefix("ANE") else { return }
+            guard let domain = EnergyArithmetic.energyDomain(ofChannel: item.channel) else { return }
             guard let watts = EnergyArithmetic.watts(energy: bridge.integerValue(of: item),
                                                      unit: item.unit, over: seconds),
                   watts.isFinite, watts >= 0 else { return }
 
-            switch channel {
-            case "CPU Energy": cpu = (cpu ?? 0) + watts
-            case "GPU Energy": gpuFine = (gpuFine ?? 0) + watts
-            case "GPU":        gpuCoarse = (gpuCoarse ?? 0) + watts
-            default:           ane = (ane ?? 0) + watts
+            switch domain {
+            case .processor:      cpu = (cpu ?? 0) + watts
+            case .graphicsFine:   gpuFine = (gpuFine ?? 0) + watts
+            case .graphicsCoarse: gpuCoarse = (gpuCoarse ?? 0) + watts
+            case .neural:         ane = (ane ?? 0) + watts
             }
         }
 
+        /// The fine GPU channel wins where both exist, and the coarse one is
+        /// the fallback on a chip that publishes no finer one.
         var activity: PowerActivity? {
             let power = PowerActivity(cpuWatts: cpu,
                                       gpuWatts: gpuFine ?? gpuCoarse,
@@ -210,7 +226,7 @@ final class EnergyProbe: ActivityProbe {
     private func frequencies(for cluster: EnergyArithmetic.ClusterChannel,
                              states: [IOReportBridge.Residency]) -> [Double] {
         if let cached = clusterFrequencies[cluster] { return cached }
-        let operating = EnergyArithmetic.operatingStateCount(states)
+        guard let operating = EnergyArithmetic.operatingStates(states)?.count else { return [] }
         let table = voltageStates.frequenciesMHz(domain: [cluster.dieQualifiedDomainName, cluster.domainName],
                                                  operatingStates: operating)
             ?? voltageStates.frequenciesMHz(operatingStates: operating)
@@ -223,7 +239,8 @@ final class EnergyProbe: ActivityProbe {
     /// except the graphics one, so shape is all there is to go on.
     private func gpuFrequencies(for states: [IOReportBridge.Residency]) -> [Double] {
         if let cached = gpuFrequencies { return cached }
-        let table = voltageStates.frequenciesMHz(operatingStates: EnergyArithmetic.operatingStateCount(states)) ?? []
+        guard let operating = EnergyArithmetic.operatingStates(states)?.count else { return [] }
+        let table = voltageStates.frequenciesMHz(operatingStates: operating) ?? []
         gpuFrequencies = table
         return table
     }

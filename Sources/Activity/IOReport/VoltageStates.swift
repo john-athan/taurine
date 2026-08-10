@@ -33,12 +33,14 @@ import IOKit
 /// Two traps for the next reader:
 ///
 ///   • The plain `voltage-states1` and `voltage-states5` do **not** hold
-///     frequencies on this chip. They hold something reciprocal, descending
-///     from 64250 to 25283, and reading them as megahertz gives a machine that
-///     appears to slow down under load. The `-sram` twins hold the real
-///     kilohertz. Rather than trust a suffix, every table is scaled by whichever
-///     of Hz, kHz or MHz lands its maximum in a range a CPU could actually run
-///     at, and a table where none of them does is not a frequency table.
+///     frequencies on this chip. They hold the reciprocal, 65536 divided by the
+///     frequency in gigahertz and rounded down: `voltage-states1` descends from
+///     64250 to 25283 alongside `voltage-states1-sram`'s 1020000 to 2592000
+///     kilohertz, and 65536/1.020 is 64250 while 65536/2.592 is 25283. Reading
+///     one as megahertz gives a machine that appears to slow down under load.
+///     Neither the suffix nor the size of the numbers is trusted: a table that
+///     falls at every step is a reciprocal whatever scale it is read at, and
+///     that is what disqualifies it.
 ///
 ///   • Do not "fix" a frequency table by sorting it. The GPU's table on this
 ///     Mac genuinely is not monotonic (…1182, 1182, 1312, 1242, 1380…), because
@@ -180,11 +182,12 @@ struct VoltageStates {
             guard let index = Int(suffix), let frequencies = frequenciesMHz(in: data) else { continue }
             tables.append(Table(index: index, isSRAM: isSRAM, frequenciesMHz: frequencies))
         }
-        return tables.sorted { ($0.index, $0.isSRAM ? 0 : 1) < ($1.index, $1.isSRAM ? 0 : 1) }
+        return tables
     }
 
     /// Pairs of little-endian `UInt32`, frequency then voltage. Nil when the
-    /// frequency column cannot be read as a plausible set of clock speeds.
+    /// frequency column is not a set of clock speeds: because it descends, or
+    /// because no scale puts it anywhere a clock could be.
     static func frequenciesMHz(in data: Data) -> [Double]? {
         guard data.count >= 8, data.count % 8 == 0 else { return nil }
 
@@ -202,10 +205,25 @@ struct VoltageStates {
         let operating = Array(raw.drop(while: { $0 == 0 }))
         guard let peak = operating.max(), peak > 0 else { return nil }
 
-        // Apple has shipped these tables in Hz (M1 through M3, and the GPU on
-        // this M4) and in kHz (the M4's CPU tables). Rather than key off a chip
-        // name, take whichever reading puts the top of the table somewhere a
-        // clock could actually be.
+        // A DVFS table climbs. Not monotonically, as the GPU's proves, but no
+        // operating-point table on this Mac falls at every single step, and the
+        // reciprocal twins all do, because dividing 65536 by a rising frequency
+        // can only fall. That test is scale-free, which the size test below is
+        // not: the size test accepts a peak between 1e5 and 2e7 read as
+        // kilohertz, and a reciprocal peak reaches 1e5 the moment a cluster's
+        // lowest operating point drops to 655 MHz (65536/0.65536 = 100000).
+        // For a cluster starting at 600 MHz the reciprocal peak is 109226,
+        // which reads as a perfectly plausible 109 MHz and is nothing of the
+        // sort.
+        if operating.count > 1, zip(operating, operating.dropFirst()).allSatisfy({ $0 > $1 }) {
+            return nil
+        }
+
+        // The scale is not fixed even within one chip: this Mac gives the GPU's
+        // table in hertz (338000000) and the efficiency cluster's in kilohertz
+        // (1020000), in the same property family, with nothing to tell them
+        // apart but the size of the numbers. So take whichever reading puts the
+        // top of the table somewhere a clock could actually be.
         for divisor in [1e6, 1e3, 1.0] {
             let top = Double(peak) / divisor
             guard (100.0...20_000.0).contains(top) else { continue }
