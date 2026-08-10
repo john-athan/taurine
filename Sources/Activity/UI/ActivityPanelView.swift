@@ -119,7 +119,7 @@ final class ActivityPanelView: NSView {
     // MARK: - the receipt
 
     /// What this panel costs while it is on screen, in the voice of the menu's
-    /// own `12.4 MB · 0 timers · 0 sockets` badge.
+    /// own `45.2 MB · 0 timers · 0 sockets` badge.
     ///
     /// The timer count is written down rather than read back, and it is right
     /// for a reason worth stating: a sample only ever arrives from the

@@ -7,7 +7,9 @@ import Cocoa
 /// `popoverDidClose`, and there is no third path. Click away, hit escape, hide
 /// the app, quit: every one of them ends at `popoverDidClose`, the timer is
 /// cancelled, every probe is closed and the panel's minute of history is thrown
-/// away. The badge goes back to reading `0 timers` because it genuinely is.
+/// away. The receipt the panel printed while it was open stops being true the
+/// instant it stops being drawn, which is the point of printing it there rather
+/// than in the menu the panel cannot coexist with.
 ///
 /// The probes arrive as an init parameter rather than being built here. This
 /// file knows how to run a panel; it does not know how to read IOReport, and

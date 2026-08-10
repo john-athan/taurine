@@ -9,10 +9,13 @@ import Foundation
 ///   1. `ProcessorProbe` builds the cluster rows.
 ///   2. `GraphicsProbe` establishes that there is a GPU to talk about.
 ///   3. `EnergyProbe` writes frequencies onto both of those and adds the watts.
-///      It cannot come first: there would be nothing to write them onto.
+///      It cannot come first, and it does not have to be trusted not to: it
+///      declares itself an enricher and the monitor runs it after every
+///      measurer whatever this list says. The order here is for readers.
 ///
-/// The rest measure things nobody else touches, so they follow in the order
-/// they appear on screen.
+/// The rest measure things nobody else touches. Thermal state is read last and
+/// drawn first, in the nameplate, because it is a property of the machine
+/// rather than a tile of its own.
 ///
 /// This list is deliberately not inside `ActivityMonitor`. The monitor knows
 /// how to run probes and nothing about which ones exist, which is what lets a

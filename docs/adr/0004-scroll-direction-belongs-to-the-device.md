@@ -126,7 +126,7 @@ claimed about SteerMouse or USB Overdrive.
   with the feature on. Calling it passive would be wrong in the way that
   matters, because a modifying tap is one that can stall the whole machine.
 - Because it can stall the machine, the tap gets a thread of its own and the
-  callback is kept to one branch, three field reads and six field writes, with
+  callback is kept to one branch, six field reads and six field writes, with
   no allocation and no lock. macOS disables a tap that takes too long to answer,
   and the app re-arms it if that ever happens.
 - Taking the tap down is synchronous: `stop()` does not return until the tap

@@ -5,7 +5,7 @@ Status: accepted
 
 ## Context
 
-Taurine's menu badge reads `12.4 MB · 0 timers · 0 sockets`, live from the
+Taurine's menu badge reads `45.2 MB · 0 timers · 0 sockets`, live from the
 kernel. That badge is the product: every other keep-awake app claims to be
 lightweight, and this one lets you check.
 

@@ -3,9 +3,14 @@ import Foundation
 /// The wattmeter. ⚡
 ///
 /// The one probe that answers a question no public API answers: how many watts
-/// this chip is burning, and how fast each cluster is actually clocked. It runs
-/// after the processor probe and writes onto the clusters that probe built, so
-/// the panel gets busy-fraction, frequency and active residency on one row.
+/// this chip is burning, and how fast each cluster is actually clocked.
+///
+/// It is the app's only enricher: it writes frequencies onto the clusters the
+/// processor probe built and a clock onto the GPU the graphics probe found, and
+/// it writes neither if those sections are not there. That is why it declares
+/// `stage` as `.enrich` rather than trusting its position in a list. Run it
+/// first and it would silently produce a panel with no clocks at all, which is
+/// exactly the failure a list order cannot protect against.
 ///
 /// Three things about the shape of this file.
 ///
@@ -43,6 +48,7 @@ import Foundation
 final class EnergyProbe: ActivityProbe {
 
     let name = "energy"
+    let stage = ProbeStage.enrich
 
     /// IOReport's own names for the slices we subscribe to. That leaves ten
     /// thousand-odd other channels alone, from Wi-Fi scan counters to spill

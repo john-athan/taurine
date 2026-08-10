@@ -3,10 +3,17 @@ import CoreGraphics
 
 /// The verdict. ↕️
 ///
-/// macOS has already applied `com.apple.swipescrolldirection` by the time an
-/// event reaches a session tap, and it applied it to every device the same way.
-/// So this is not a second direction setting; it is a correction on top of the
-/// one the system made. Exactly one class of device is ever wrong, and it is
+/// This is not a second direction setting, it is a correction on top of the one
+/// the system already made: by the time an event reaches a session tap, macOS
+/// has applied `com.apple.swipescrolldirection` to every device the same way.
+///
+/// That premise is load bearing and is not proven here. Synthetic events cannot
+/// test it, and the corroboration is circumstantial: every comparable tool
+/// negates at a session tap, coexists with the system setting, and would be
+/// inverted for most of its users if the ordering were the other way round.
+/// ADR 0004 records it as open, and a wheel mouse settles it in half a minute.
+///
+/// Given the premise, exactly one class of device is ever wrong, and it is
 /// always the class that disagrees with the global flag:
 ///
 ///     system says natural   →  surfaces are right, wheels are flipped

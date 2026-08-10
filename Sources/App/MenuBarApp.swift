@@ -99,6 +99,7 @@ final class MenuBarApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// Belt and suspenders: whatever tears us down, put the lid flag back and
     /// let go of everything the panel and the tap are holding.
     func applicationWillTerminate(_ n: Notification) {
+        assertion.release()
         clamshell.revertQuietly()
         scroll.stop()
         activityPanel?.close()

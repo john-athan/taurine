@@ -23,12 +23,18 @@ final class ThermalProbe: ActivityProbe {
 
     let name = "thermal"
 
-    func open() throws {}
+    private var isOpen = false
 
-    func close() {}
+    func open() throws { isOpen = true }
+
+    func close() { isOpen = false }
 
     func read(into sample: inout ActivitySample) {
-        // A level, so there is no baseline for `open()` to have taken.
+        // A level, so there is no baseline for `open()` to have taken. The flag
+        // still exists, because a probe that answers after it has been closed
+        // is the odd one out among the seven, and somebody will eventually rely
+        // on read-after-close being inert.
+        guard isOpen else { return }
         sample.thermal = ThermalActivity(state: ProcessInfo.processInfo.thermalState)
     }
 }

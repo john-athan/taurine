@@ -20,7 +20,7 @@ build path next to the one that ships.
 
 Tests are a second `swiftc` invocation, not a second build system.
 
-`tests/run.sh` compiles every file in `Sources/` except `Sources/App/main.swift`
+`Tests/run.sh` compiles every file in `Sources/` except `Sources/App/main.swift`
 together with `Tests/*.swift` into one binary and runs it. `Check` in
 `Tests/Harness.swift` is the whole framework: a counter, a list of failures, and
 an exit code.

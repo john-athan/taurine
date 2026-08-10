@@ -15,7 +15,7 @@ build:
 	./build.sh
 
 test:
-	./tests/run.sh
+	./Tests/run.sh
 
 install: build
 	rm -rf "$(PREFIX)/$(APP)"

@@ -8,11 +8,17 @@ import Darwin
 /// live from the kernel, not hard-coded:
 ///   • resident memory via `task_info`
 ///   • open BSD sockets via `proc_pidinfo` (libproc)
-///   • active timers straight from the intent engine
+///   • active timers, counted by the intent engine, which owns the only ones
+///     that can be running while this badge is on screen
 ///
 /// The efficiency is architectural: assertions are passive kernel flags, and
 /// every watcher is event-driven (process-exit sources, power-source
 /// notifications, a Carbon hotkey), so while idle those counts are genuinely 0.
+///
+/// The badge cannot see the activity panel's sampling timer, and does not
+/// pretend to: the panel is a transient popover, so opening this menu has
+/// already dismissed it. The panel prints its own receipt instead, which is the
+/// only place that number can be both live and true.
 enum Diagnostics {
 
     /// Resident memory of *this* process, in megabytes.
@@ -42,7 +48,7 @@ enum Diagnostics {
         return (0..<n).reduce(0) { $0 + (fds[$1].proc_fdtype == UInt32(PROX_FDTYPE_SOCKET) ? 1 : 0) }
     }
 
-    /// Live one-line badge for the menu, e.g. "12.4 MB · 0 timers · 0 sockets".
+    /// Live one-line badge for the menu, e.g. "45.2 MB · 0 timers · 0 sockets".
     /// `activeTimers` is the number of live dispatch sources in the intent engine.
     static func badge(activeTimers: Int) -> String {
         let timers = activeTimers == 1 ? "1 timer" : "\(activeTimers) timers"

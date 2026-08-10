@@ -107,12 +107,13 @@ The menu gives you:
 | **Keep awake for…** | 15 min / 30 min / 1 h / 2 h, then auto-off. |
 | **Stay awake until an app quits…** | Pick a running app; Taurine releases the instant it exits. |
 | **Why is my Mac awake?** | Live list of every process holding a sleep assertion. |
-| **What is this Mac doing?** | The activity panel: cores, watts, memory, disk, network. Costs nothing until you open it. |
+| **What is this Mac doing?** | The activity panel: cores, GPU, watts, memory, disk, network. Costs nothing until you open it. |
+| *(the badge)* | `45.2 MB · 0 timers · 0 sockets`, read live from the kernel every time the menu opens. Not a claim, a measurement. |
+| **Charge limit** | Stop charging at 60–90% to spare the cell. One admin prompt to install, then free forever. |
 | **Things Apple got wrong** | Small fixes for settings the system should have had. Currently: scroll direction per device. |
 | **Also prevent system sleep** | Not just the display — the whole machine (for long jobs). |
 | **Keep awake with lid closed (AC only)** | Off by default — a closed lid sleeps normally. On, and only while awake + plugged in, Taurine holds the lid open too (`pmset disablesleep`, needs admin). Reverts on unplug, toggle-off, or quit. |
 | **Auto-off under 20% on battery** | The conscience. Won't drain your laptop overnight. |
-| **Charge limit** | Stop charging at 60–90% to spare the cell. One admin prompt to install, then free forever. |
 | **Start awake at launch** / **Start at login** | Set once, forget. |
 
 > **Lid-closed, carefully.** Ordinary sleep assertions (everything else Taurine
@@ -141,7 +142,7 @@ anything. See [ADR 3](docs/adr/0003-ioreport-for-power-without-root.md).
 Opening it creates one repeating timer and opens the probes; closing it cancels
 the timer, closes the probes and throws the history away. The panel prints its
 own receipt while it is up, in the same voice as the menu badge:
-`This panel: 1 timer · 1 sample a second · Taurine 12.4 MB`, with the megabytes
+`This panel: 1 timer · 1 sample a second · Taurine 45.2 MB`, with the megabytes
 read live from the kernel. See
 [ADR 2](docs/adr/0002-the-activity-panel-costs-nothing-while-closed.md).
 
@@ -169,7 +170,14 @@ and Taurine would rather ask for nothing until you ask it to. macOS grants that
 permission to a specific build of a binary, so a rebuild or an upgrade means
 granting it again: remove Taurine from the Accessibility list with the minus
 button and add it back. The menu item says so when that has happened, instead of
-looking switched on and doing nothing. See
+looking switched on and doing nothing.
+
+One known limit, stated because you would otherwise find it yourself: a mouse
+driven by vendor software (Logi Options+ and friends) hands macOS scroll events
+already reshaped to look like a trackpad's, so Taurine leaves them alone and the
+feature appears to do nothing for that mouse. Invert the wheel in the vendor
+software instead, or quit it and let Apple's own driver present the mouse. The
+reasoning, the evidence and the better design that is not written yet are all in
 [ADR 4](docs/adr/0004-scroll-direction-belongs-to-the-device.md).
 
 ---

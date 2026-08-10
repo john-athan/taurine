@@ -8,10 +8,16 @@ import Foundation
 /// entire reason Taurine can promise the panel costs nothing while it is shut.
 ///
 /// `read` is handed the sample under construction and fills in its own slice.
-/// Probes run in the order the monitor was given them, which lets a probe that
-/// enriches an earlier one (frequencies onto clusters) simply come later in the
-/// list. A probe that cannot answer leaves its slice alone rather than writing
-/// a zero.
+/// A probe that cannot answer leaves its slice alone rather than writing a zero.
+///
+/// Some probes only have something to say about what another probe already
+/// wrote: the energy probe puts frequencies onto the clusters the processor
+/// probe built, and writes nothing at all if they are not there yet. That used
+/// to be a matter of list order, which is a dependency nothing enforces and
+/// nothing notices breaking: reorder the list and the panel quietly loses every
+/// clock reading while every test still passes. So a probe declares its `stage`
+/// instead, and the monitor runs every measurer before any enricher whatever
+/// order it was handed.
 ///
 /// Anything that measures a rate takes its baseline reading in `open()`, not on
 /// its first `read`. The difference is what the user sees: a panel whose first
@@ -23,6 +29,11 @@ protocol ActivityProbe: AnyObject {
 
     /// Short name, used in diagnostics when a probe declines to open.
     var name: String { get }
+
+    /// Whether this probe produces a section of the sample or decorates one
+    /// somebody else produced. Measuring is the default, so only the unusual
+    /// case has to say anything.
+    var stage: ProbeStage { get }
 
     /// Acquire whatever the probe needs, and take the first reading of any
     /// counter this probe measures the change in. Throwing here drops just this
@@ -36,13 +47,31 @@ protocol ActivityProbe: AnyObject {
     func read(into sample: inout ActivitySample)
 }
 
+/// When a probe wants to run, relative to the others.
+enum ProbeStage {
+    /// Writes a section of the sample from nothing. Runs first.
+    case measure
+    /// Adds to a section another probe has already written, and does nothing
+    /// useful if that section is absent. Runs after every measurer.
+    case enrich
+}
+
+extension ActivityProbe {
+    var stage: ProbeStage { .measure }
+}
+
 /// The metronome. ⏱️
 ///
-/// Owns the only repeating timer Taurine ever creates, and owns it only while
-/// somebody is looking. `start` opens the probes and begins sampling; `stop`
-/// cancels the timer, closes every probe and forgets them. There is no
-/// "paused" state, no warm cache and no background refresh, because the whole
-/// claim on the menu badge (`0 timers`) has to survive somebody checking it.
+/// Owns one repeating timer, and owns it only while somebody is looking.
+/// `start` opens the probes and begins sampling; `stop` cancels the timer,
+/// closes every probe and forgets them. There is no "paused" state, no warm
+/// cache and no background refresh, which is what lets the panel print its own
+/// receipt and mean it.
+///
+/// It is not the app's only timer, and the panel's receipt is careful to say
+/// "this panel" for that reason: a countdown intent runs one while it counts,
+/// and a toast runs one for the length of its animation. What is true is that
+/// nothing here runs while the panel is shut.
 ///
 /// Sampling happens on a utility queue: reading IOReport takes single-digit
 /// milliseconds and the main thread is busy drawing. Samples are delivered back
@@ -58,7 +87,29 @@ final class ActivityMonitor {
     private var open: [ActivityProbe] = []
     private var unavailable: [ProbeFailure] = []
     private var lastUptime: TimeInterval?
-    private var running = false
+
+    /// Whether a session is meant to be running. Read and written from the
+    /// caller's thread and from the sampling queue, so it is behind a lock:
+    /// `queue.async` orders when a block starts, not when a later write on
+    /// another thread lands, and Thread Sanitizer says so out loud. The lock is
+    /// taken on open, on close and once inside the opening block, never per
+    /// sample.
+    private let stateLock = NSLock()
+    private var runningLocked = false
+    private var running: Bool {
+        get { stateLock.lock(); defer { stateLock.unlock() }; return runningLocked }
+        set { stateLock.lock(); runningLocked = newValue; stateLock.unlock() }
+    }
+
+    /// Claim the transition, or report that somebody else already has. One
+    /// atomic step, so two threads calling `start` cannot both get past it.
+    private func claim(_ wanted: Bool) -> Bool {
+        stateLock.lock()
+        defer { stateLock.unlock() }
+        guard runningLocked != wanted else { return false }
+        runningLocked = wanted
+        return true
+    }
 
     init(probes: [ActivityProbe]) {
         self.probes = probes
@@ -75,18 +126,18 @@ final class ActivityMonitor {
     /// user has finished looking at it. Every sample therefore carries a
     /// positive `interval`, and no probe ever has to describe a state it has no
     /// baseline for.
+    ///
     /// Opening is done on the sampling queue, not here. One probe alone takes
     /// the better part of a tenth of a second to enumerate what the chip
     /// publishes, and the caller is a menu item click: the popover has to be on
     /// screen in that time, not after it.
     func start(interval: TimeInterval) {
-        guard !running else { return }
-        running = true
+        guard claim(true) else { return }
 
         queue.async { [weak self] in
             guard let self, self.running else { return }
             var failures: [ProbeFailure] = []
-            self.open = self.probes.compactMap { probe in
+            let opened = self.probes.compactMap { probe -> ActivityProbe? in
                 do {
                     try probe.open()
                     return probe
@@ -95,6 +146,10 @@ final class ActivityMonitor {
                     return nil
                 }
             }
+            // Measurers first, enrichers after, each group in the order it was
+            // given. Partitioning rather than sorting, because `sorted` is not
+            // stable and the order inside a group is the caller's business.
+            self.open = opened.filter { $0.stage == .measure } + opened.filter { $0.stage == .enrich }
             self.unavailable = failures
             self.lastUptime = ProcessInfo.processInfo.systemUptime
 
@@ -114,8 +169,7 @@ final class ActivityMonitor {
     /// any point in the opening sequence: the teardown lands on the same serial
     /// queue as the setup, so it cannot overtake it.
     func stop() {
-        guard running else { return }
-        running = false
+        guard claim(false) else { return }
 
         queue.async { [weak self] in
             guard let self else { return }

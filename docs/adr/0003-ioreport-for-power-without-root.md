@@ -12,9 +12,10 @@ frequency each cluster is running at. Public API has none of them.
 The usual answer is `powermetrics`, which is what `mactop` and `asitop` shell
 out to. It works, and it costs a root password: `powermetrics` refuses to run
 without one. For an app whose entire pitch is that it asks for nothing, shipping
-a feature that opens with an admin prompt is the wrong trade. Taurine already
-asks for admin once, for the charge daemon, and that one buys hardware access
-that genuinely cannot be had otherwise.
+a feature that opens with an admin prompt is the wrong trade. Taurine asks for
+admin in two places already, to install the charge daemon and to hold the lid
+open, and both of them buy something that genuinely cannot be had otherwise. A
+readout is not that.
 
 `powermetrics` itself is a thin client over `IOReport`, a private but stable
 framework in the dyld cache. IOReport's energy counters are readable by an
@@ -44,8 +45,8 @@ source on the user's machine.
 
 ## Consequences
 
-- No password, ever, for the activity panel. The charge daemon remains the only
-  part of Taurine that asks for admin.
+- No password, ever, for the activity panel, and nothing it does could ask for
+  one later: reading is all it can do.
 - A private interface can change. The blast radius is bounded by the previous
   point, and the parsing is covered by tests over captured channel data, so a
   change shows up as a failing test rather than as a wrong number.
