@@ -208,13 +208,44 @@ func runFinderCutPasteTests() {
                    "the late copy is taken as ours")
     }
 
-    Check.suite("ledger: pasting spends the cut, and so does changing your mind") {
+    Check.suite("ledger: a move does not spend the cut, because the pasteboard is unchanged") {
+        // Found by a user in about a minute. Move a file, press ⌘Z to undo the
+        // move, press ⌘V again: with the cut spent, the second paste was an
+        // ordinary one and the file was copied into both folders. Nothing about
+        // the pasteboard changes across a move or an undo (measured: the change
+        // count holds still and the URL it carries follows the file), so nothing
+        // about the cut may change either.
         let cut = PendingCut(before: 10, pending: 11, awaitingCopy: false)
-        for action in [FinderKeyAction.moveInstead, .forgetTheCut] {
-            let after = FinderCutLedger.after(action, isDown: true, cut: cut, changeCount: 11)
-            Check.equal(after, .nothingPending, "\(action) empties the ledger")
-            Check.that(!FinderCutLedger.hasCut(after), "so a second ⌘V pastes rather than moves")
-        }
+        let after = FinderCutLedger.after(.moveInstead, isDown: true, cut: cut, changeCount: 11)
+        Check.equal(after, cut, "the cut survives its own paste")
+        Check.that(FinderCutLedger.isPending(after, changeCount: 11),
+                   "so ⌘V after an undo moves again rather than copying")
+    }
+
+    Check.suite("ledger: changing your mind does spend it") {
+        let cut = PendingCut(before: 10, pending: 11, awaitingCopy: false)
+        let after = FinderCutLedger.after(.forgetTheCut, isDown: true, cut: cut, changeCount: 11)
+        Check.equal(after, .nothingPending, "the ledger is emptied")
+        Check.that(!FinderCutLedger.hasCut(after), "so the next ⌘V pastes rather than moves")
+    }
+
+    Check.suite("ledger: a waiting claim is pinned the first time it is looked at") {
+        // The key-up sample was too early in every live measurement: Finder's
+        // copy lands after the key comes back up. Without pinning at each
+        // reading, the loose claim would be the path every decision took.
+        let waiting = PendingCut(before: 10, pending: -1, awaitingCopy: true)
+        let pinned = FinderCutLedger.pin(waiting, changeCount: 11)
+        Check.equal(pinned, PendingCut(before: 10, pending: 11, awaitingCopy: false),
+                    "the copy that landed is now the cut's own pasteboard, by number")
+        Check.that(FinderCutLedger.isPending(pinned, changeCount: 11), "and it is live")
+        Check.that(!FinderCutLedger.isPending(pinned, changeCount: 12),
+                   "and nothing later can be taken for it")
+
+        Check.equal(FinderCutLedger.pin(waiting, changeCount: 10), waiting,
+                    "a count that has not moved is left waiting, not given up on")
+        let settled = PendingCut(before: 10, pending: 11, awaitingCopy: false)
+        Check.equal(FinderCutLedger.pin(settled, changeCount: 99), settled,
+                    "and a cut that already knows its pasteboard is never re-pinned")
     }
 
     Check.suite("ledger: a second cut replaces the first") {

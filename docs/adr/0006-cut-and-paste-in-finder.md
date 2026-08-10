@@ -115,13 +115,35 @@ against a real Finder:
   says yes. A rule that consulted it would keep the cut and the next ⌘V would
   move the files that copy was about to produce. Verified: ⌘X on a.txt, ⌘C on
   b.txt, ⌘V in another folder copies b.txt and leaves a.txt where it was.
-- **A ⌘X that copied nothing is not a cut.** With no selection the change count
-  never moves, and ⌘V stays an ordinary paste. Verified with a real copy sitting
-  on the pasteboard first, which is the shape where getting it wrong would move
-  somebody else's files: the paste copied, and moved nothing.
-- **A paste always spends the cut**, whether it moved anything or not, and an
-  application switch settles any claim still waiting for its copy. Without those
-  two, a ⌘X that copied nothing leaves a claim outstanding indefinitely.
+- **A ⌘X that copied nothing is not a cut.** With no copy the change count never
+  moves, and ⌘V stays an ordinary paste. Trying to stage that turned up
+  something worth knowing: in Finder there is no such thing as copying nothing.
+  Press ⌘C in a window with no item selected and Finder copies the window's own
+  folder, change count and all. So a ⌘X with nothing selected cuts the folder
+  you are looking at, and pasting moves that folder, which is precisely what
+  ⌘C followed by ⌥⌘V does without Taurine. Verified with a stale copy of another
+  file sitting on the pasteboard first, the shape where getting it wrong would
+  move somebody else's file: the folder moved, the stale file was untouched.
+  The rule stays, because a Finder too busy to copy produces the same state.
+- **A paste that moved nothing ends the claim**, and an application switch
+  settles any claim still waiting for its copy. Without those two, a ⌘X that
+  copied nothing would leave a claim outstanding indefinitely.
+
+A paste that *did* move something, on the other hand, leaves the cut exactly
+where it was. That is a correction, and it came from a user inside a minute of
+using it: move a file, press ⌘Z to undo the move, press ⌘V again, and the second
+paste was an ordinary one, so the file was copied and ended up in both folders.
+The rule now is that a cut lasts as long as the pasteboard it pinned, and
+measurement says that is the honest span. Across a move and an undo the change
+count holds still and the file URL on the pasteboard follows the file to its new
+home and back. So ⌘V goes on meaning Move Item Here for as long as ⌥⌘V would,
+which is the same answer Finder gives, arrived at without a special case.
+
+The pinning itself is done at every reading of the pasteboard, not only on the
+key-up of the cut, and that is not a refinement either. Measured against a real
+Finder, the key-up sample was too early every single time: the copy lands after
+the key comes back up. Pinning only there meant the loose claim was the path
+every decision actually took, while the exact rule sat unused.
 
 ## What this gets wrong
 
@@ -138,6 +160,12 @@ against a real Finder:
   files to the pasteboard, plus no paste and no application switch in between,
   since either settles the claim. It is narrow, it is not zero, and it is the
   price of not polling the pasteboard.
+- **A ⌘V that arrives before Finder has copied is a paste, not a move.** The cut
+  is only live once its copy exists, so pressing ⌘V while Finder is still busy
+  with the ⌘X gives you a copy. That is the safe direction, and it is not
+  theoretical: it is reproducible by driving Finder with AppleEvents fast enough
+  that the copy has not landed a second later. At human speed it has not been
+  seen.
 - **The tap follows activation, so it lags it slightly.** A ⌘X typed in the few
   milliseconds between another application coming forward and its notification
   arriving would be rewritten by a tap that should already be gone. The reverse,

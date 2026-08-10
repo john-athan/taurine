@@ -98,9 +98,18 @@ final class FinderKeyTap {
         // The pasteboard is only asked about when there is a cut to ask about,
         // which is the difference between a question per cut and a question per
         // ⌘C anybody ever types in Finder.
-        let cut = state.pointee.cut
-        let pending = FinderCutLedger.hasCut(cut)
-            && FinderCutLedger.isPending(cut, changeCount: changeCount())
+        //
+        // The reading is used twice: to pin a claim that was still waiting for
+        // its copy, so that every decision after this one is made on an exact
+        // count, and then to answer the question that was asked.
+        var cut = state.pointee.cut
+        var pending = false
+        if FinderCutLedger.hasCut(cut) {
+            let now = changeCount()
+            cut = FinderCutLedger.pin(cut, changeCount: now)
+            state.pointee.cut = cut
+            pending = FinderCutLedger.isPending(cut, changeCount: now)
+        }
 
         let action = FinderCutPolicy.decide(key, editingText: editing, cutIsPending: pending)
         FinderCutPolicy.apply(action, to: event)

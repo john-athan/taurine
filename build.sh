@@ -24,8 +24,8 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
   <key>CFBundleName</key><string>Taurine</string>
   <key>CFBundleDisplayName</key><string>Taurine</string>
   <key>CFBundleIdentifier</key><string>io.github.john-athan.taurine</string>
-  <key>CFBundleVersion</key><string>1.3.0</string>
-  <key>CFBundleShortVersionString</key><string>1.3.0</string>
+  <key>CFBundleVersion</key><string>1.3.1</string>
+  <key>CFBundleShortVersionString</key><string>1.3.1</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleExecutable</key><string>taurine</string>
   <key>LSUIElement</key><true/>

@@ -20,11 +20,13 @@ import Foundation
 /// `pending == now` is the whole test, and it is false the instant anything
 /// copies anything anywhere, which is exactly when the promise should expire.
 ///
-/// `awaitingCopy` covers the one gap in that: Finder is asked to copy and the
-/// key comes back up perhaps eighty milliseconds later, and a busy Finder may
-/// not have finished. Rather than declare the cut dead, the ledger keeps it
-/// claimable while nothing has copied yet, and the ⌘C rule in `FinderCutPolicy`
-/// is what stops that claim from stealing somebody else's copy: a copy typed in
+/// `awaitingCopy` covers the gap in that: Finder is asked to copy, the key comes
+/// back up perhaps eighty milliseconds later, and the copy has not landed. That
+/// is not the rare case, it is every measured case. Rather than declare the cut
+/// dead, the ledger keeps it claimable until a copy lands and pins it to that
+/// pasteboard the first time it looks, so the loose claim covers a keystroke or
+/// two rather than the whole life of the cut. The ⌘C rule in `FinderCutPolicy`
+/// is what stops the claim from stealing somebody else's copy: a copy typed in
 /// Finder forgets the cut before its pasteboard ever exists.
 ///
 /// The remaining hole is written down rather than papered over: while a cut is
@@ -49,6 +51,30 @@ enum FinderCutLedger {
         return false
     }
 
+    /// Nail a waiting claim down to the pasteboard that turned up under it.
+    ///
+    /// A claim that is still waiting is the loose kind: it says "a copy has not
+    /// landed yet, so take the next one as mine". The moment a count is seen
+    /// that is not the one the cut started from, that copy has landed and the
+    /// cut can name it exactly, after which nothing else can ever be mistaken
+    /// for it. So this is called on every reading of the pasteboard, and not
+    /// only on the key-up of the cut.
+    ///
+    /// That is not a refinement, it is the difference between the exact rule and
+    /// the loose one being the normal path. Measured against a real Finder, the
+    /// key-up sample was too early every single time: the copy lands after the
+    /// key comes back up, so the cut was never pinned there and every later
+    /// decision was made on the loose claim.
+    ///
+    /// A count that has *not* moved is left alone rather than given up on,
+    /// because Finder being slow and Finder having copied nothing look identical
+    /// from here. Giving up on that is `resolve`'s job, and it has the one piece
+    /// of information that separates them: that the user has left Finder.
+    static func pin(_ cut: PendingCut, changeCount now: Int64) -> PendingCut {
+        guard cut.awaitingCopy, now != cut.before else { return cut }
+        return PendingCut(before: cut.before, pending: now, awaitingCopy: false)
+    }
+
     /// Settle a claim that is still waiting for its copy, at the moment we stop
     /// watching Finder.
     ///
@@ -64,9 +90,7 @@ enum FinderCutLedger {
     /// around: after it, no fuzzy claim survives an application switch.
     static func resolve(_ cut: PendingCut, changeCount now: Int64) -> PendingCut {
         guard cut.awaitingCopy else { return cut }
-        return now != cut.before
-            ? PendingCut(before: cut.before, pending: now, awaitingCopy: false)
-            : .nothingPending
+        return now != cut.before ? pin(cut, changeCount: now) : .nothingPending
     }
 
     /// How an action moves the ledger. Pure, total, and the only place these
@@ -92,7 +116,19 @@ enum FinderCutLedger {
                 ? PendingCut(before: cut.before, pending: now, awaitingCopy: false)
                 : cut
 
-        case .moveInstead, .forgetTheCut:
+        case .moveInstead:
+            // Deliberately unchanged. A cut lasts exactly as long as the
+            // pasteboard it pinned, and pasting does not change the pasteboard.
+            //
+            // Spending it here was the first version, and it was wrong in a way
+            // a user found in a minute: move a file, press ⌘Z to undo the move,
+            // press ⌘V again, and the second paste was an ordinary one, so the
+            // file was copied and ended up in both folders. Nothing about the
+            // pasteboard had changed between those two pastes, so nothing about
+            // the cut should have.
+            return cut
+
+        case .forgetTheCut:
             return .nothingPending
         }
     }
