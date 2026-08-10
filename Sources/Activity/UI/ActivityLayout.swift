@@ -26,7 +26,6 @@ enum ActivityLayout {
     struct Span: Equatable {
         var origin: CGFloat
         var length: CGFloat
-        var end: CGFloat { origin + length }
     }
 
     // MARK: - rows of bars

@@ -15,6 +15,11 @@ import Cocoa
 /// above it, and because thirty points of red a third of the way down a calm
 /// grey panel is unmissable wherever it is.
 ///
+/// Under all of it, two notes in small print: what this Mac could not answer,
+/// and what the panel costs while it is open. Both are claims Taurine makes
+/// about itself, so both belong at the bottom of the thing making them rather
+/// than in a document nobody reads.
+///
 /// The trap: this view never resizes itself. `preferredHeight` is what the
 /// popover should be, and the controller sets it. The height genuinely changes
 /// once per session, one second after opening, when the rate probes get their
@@ -32,45 +37,66 @@ final class ActivityPanelView: NSView {
     private let disk = ActivityTrafficView.disk()
     private let network = ActivityTrafficView.network()
 
-    /// A real text field rather than another hand-drawn tile: the footer is the
-    /// one place the panel has prose, and prose wants wrapping, selection and
-    /// an accessibility label it gets for free.
-    private let footer = NSTextField(labelWithString: "")
+    /// The two footer lines. Text fields rather than hand-drawn marks because
+    /// they are the only prose on the panel, and a field measures the string it
+    /// is about to draw: whatever it reserves is what it takes, however many
+    /// lines that turns out to be. Everything above them is a single line and
+    /// is measured by the pen instead.
+    let notice = NSTextField(labelWithString: "")
+    let receipt = NSTextField(labelWithString: "")
+
+    /// Air between the two footer lines. Less than a section gap, because they
+    /// are one block of small print rather than two sections.
+    private static let footerGap: CGFloat = 5
 
     private var sections: [ActivitySectionView] {
         [header, cpu, gpu, power, memory, disk, network]
     }
-
-    /// Names of probes that declined to open, kept so the footer can say so.
-    private var unavailable: [String] = []
 
     override var isFlipped: Bool { true }
 
     init() {
         super.init(frame: CGRect(x: 0, y: 0, width: ActivityTheme.width, height: 200))
 
-        footer.font = ActivityTheme.footnote
-        footer.textColor = .tertiaryLabelColor
-        footer.maximumNumberOfLines = 2
-        footer.lineBreakMode = .byTruncatingTail
-        footer.isSelectable = false
-        addSubview(footer)
-
+        // Tiles first, then the footer, so VoiceOver arrows through the panel
+        // in the order it is drawn.
         for section in sections { addSubview(section) }
+        configure(notice, font: ActivityTheme.footnote)
+        configure(receipt, font: ActivityTheme.receipt)
+        receipt.toolTip = Self.receiptExplanation
     }
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("Taurine builds no nibs") }
+
+    /// Both footer lines wrap; neither truncates. `NSTextField(labelWithString:)`
+    /// hands back a cell that does not wrap at all, whatever
+    /// `maximumNumberOfLines` is set to afterwards: it draws one line and ends
+    /// it with an ellipsis. On a Mac where five probes decline, that ellipsis
+    /// eats the list of names, which is the only thing the sentence exists to
+    /// deliver. Turning single-line mode off and the cell's own wrapping on is
+    /// what makes the field lay out, and measure, as many lines as it needs.
+    private func configure(_ field: NSTextField, font: NSFont) {
+        field.font = font
+        field.textColor = ActivityTheme.quietData
+        field.usesSingleLineMode = false
+        field.cell?.wraps = true
+        field.cell?.isScrollable = false
+        field.lineBreakMode = .byWordWrapping
+        field.maximumNumberOfLines = 0
+        field.isSelectable = false
+        addSubview(field)
+    }
 
     // MARK: - the sample
 
     func update(_ sample: ActivitySample) {
         for section in sections { section.take(sample) }
 
-        unavailable = sample.unavailable.map(\.name)
-        footer.stringValue = ActivitySpeech.unavailable(unavailable) ?? ""
-        footer.toolTip = sample.unavailable.isEmpty ? nil
+        notice.stringValue = ActivitySpeech.unavailable(sample.unavailable.map(\.name)) ?? ""
+        notice.toolTip = sample.unavailable.isEmpty ? nil
             : sample.unavailable.map { "\($0.name): \($0.reason)" }.joined(separator: "\n")
+        receipt.stringValue = Self.receiptLine
 
         relayout()
         needsDisplay = true
@@ -78,25 +104,67 @@ final class ActivityPanelView: NSView {
 
     /// Throw the session away. Nothing survives the panel closing: not the
     /// minute of history, not the last values, not the list of what was
-    /// missing.
+    /// missing, and not the receipt, which is only true while the timer it
+    /// counts is running.
     func forget() {
         for section in sections { section.forget() }
-        unavailable = []
-        footer.stringValue = ""
-        footer.toolTip = nil
+        notice.stringValue = ""
+        notice.toolTip = nil
+        receipt.stringValue = ""
         relayout()
         needsDisplay = true
     }
+
+    // MARK: - the receipt
+
+    /// What this panel costs while it is on screen, in the voice of the menu's
+    /// own `12.4 MB · 0 timers · 0 sockets` badge.
+    ///
+    /// The timer count is written down rather than read back, and it is right
+    /// for a reason worth stating: a sample only ever arrives from the
+    /// monitor's timer, that timer is created when the panel opens and
+    /// cancelled when it closes, and the panel creates no other. So while there
+    /// is a sample to draw there is exactly one of them, and when there is not,
+    /// this line is not drawn at all. The cadence is the one in
+    /// `ActivityPanelController.interval`, which is a second.
+    ///
+    /// The megabytes are Taurine's whole resident footprint, read live from the
+    /// kernel by `Diagnostics` rather than asserted, and they are labelled with
+    /// the app's name rather than the panel's: the panel's own share of them is
+    /// not separable, and naming a number that cannot be measured is the one
+    /// thing this panel refuses to do.
+    private static var receiptLine: String {
+        String(format: "This panel: 1 timer · 1 sample a second · Taurine %.1f MB",
+               Diagnostics.residentMemoryMB)
+    }
+
+    private static let receiptExplanation =
+        "One repeating timer, this panel's sampler, at one sample a second. It is cancelled "
+        + "and every probe is closed the moment the panel closes, so nothing here runs while "
+        + "it is shut. The megabytes are Taurine's resident memory, read from the kernel with "
+        + "task_info, not the panel's share of it."
 
     // MARK: - geometry
 
     /// What the popover should be, for the sample currently held.
     private(set) var preferredHeight: CGFloat = 200
 
+    /// What a footer line needs at the panel's width, asked of the cell that
+    /// will draw it. Anything measured any other way is a second opinion, and
+    /// the two lines reserved for a sentence that rendered as one were exactly
+    /// that.
+    private func height(of field: NSTextField) -> CGFloat {
+        guard !field.stringValue.isEmpty, let cell = field.cell else { return 0 }
+        let unbounded = CGRect(x: 0, y: 0, width: ActivityTheme.content,
+                               height: .greatestFiniteMagnitude)
+        return ceil(cell.cellSize(forBounds: unbounded).height)
+    }
+
     private var footerHeight: CGFloat {
-        guard !footer.stringValue.isEmpty else { return 0 }
-        return ActivityDraw.height(footer.stringValue, font: ActivityTheme.footnote,
-                                   width: ActivityTheme.content, lines: 2) + 4
+        let top = height(of: notice)
+        let bottom = height(of: receipt)
+        guard top > 0, bottom > 0 else { return top + bottom }
+        return top + Self.footerGap + bottom
     }
 
     private func relayout() {
@@ -111,10 +179,15 @@ final class ActivityPanelView: NSView {
             section.needsDisplay = true
         }
 
-        let footerY = origins[origins.count - 1]
-        footer.frame = CGRect(x: ActivityTheme.margin, y: footerY,
-                              width: ActivityTheme.content, height: heights[heights.count - 1])
-        footer.isHidden = heights[heights.count - 1] <= 0
+        var y = origins[origins.count - 1]
+        for field in [notice, receipt] {
+            let line = height(of: field)
+            field.frame = CGRect(x: ActivityTheme.margin, y: y,
+                                 width: ActivityTheme.content, height: line)
+            field.isHidden = line <= 0
+            guard line > 0 else { continue }
+            y += line + Self.footerGap
+        }
 
         preferredHeight = ActivityLayout.stackHeight(heights, spacing: ActivityTheme.sectionGap,
                                                      top: ActivityTheme.margin,

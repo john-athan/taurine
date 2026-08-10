@@ -27,7 +27,40 @@ func runActivityFormatTests() {
         Check.equal(ActivityFormat.watts(102.4), "102 W", "no decimals above a hundred")
         Check.equal(ActivityFormat.watts(-1), ActivityFormat.unknown, "negative power is not a reading")
         Check.equal(ActivityFormat.watts(.infinity), ActivityFormat.unknown, "infinite power is not a reading")
+        Check.equal(ActivityFormat.watts(.nan), ActivityFormat.unknown, "and neither is a NaN")
         Check.equal(ActivityFormat.watts(8.14, unit: "watts"), "8.1 watts", "spoken form")
+    }
+
+    Check.suite("format: the hundred-watt band, where the precision changes") {
+        // A Mac under sustained load sits right here, and the headline crosses
+        // this boundary several times a minute. "100.0 W" is two characters
+        // wider than the "100 W" it becomes a moment later, which is exactly
+        // the jitter the precision rules exist to prevent.
+        Check.equal(ActivityFormat.watts(99.9), "99.9 W", "below the boundary, one decimal")
+        Check.equal(ActivityFormat.watts(99.94), "99.9 W", "and rounding down stays there")
+        Check.equal(ActivityFormat.watts(99.95), "100 W",
+                    "rounding up carries into the band above rather than printing 100.0 W")
+        Check.equal(ActivityFormat.watts(99.99), "100 W", "as does anything else that rounds to a hundred")
+        Check.equal(ActivityFormat.watts(100), "100 W", "and the boundary itself")
+        Check.equal(ActivityFormat.watts(100.04), "100 W", "and just past it")
+
+        let crossing = [99.95, 100.0, 100.4, 137.0].map { ActivityFormat.watts($0) }
+        Check.that(Set(crossing.map(\.count)).count == 1,
+                   "nothing in the hundreds is wider than anything else in the hundreds")
+
+        Check.equal(ActivitySpeech.watts(99.95), "100 watts", "the spoken form carries too")
+
+        // The other boundary deliberately does not carry: "1.00" is the same
+        // width as the "0.99" before it, and the decimals are the whole reason
+        // a Neural Engine at 0.07 W is legible.
+        Check.equal(ActivityFormat.watts(0.996), "1.00 W", "one watt keeps its two decimals")
+    }
+
+    Check.suite("format: the headline asks for the digits without the unit") {
+        Check.equal(ActivityFormat.wattsNumber(14.25), "14.2", "the number the hero font draws")
+        Check.equal(ActivityFormat.wattsNumber(99.95), "100", "with the same carry")
+        Check.isNil(ActivityFormat.wattsNumber(.nan), "a NaN has no digits to draw")
+        Check.isNil(ActivityFormat.wattsNumber(-0.5), "and neither has a negative")
     }
 
     Check.suite("format: frequencies") {

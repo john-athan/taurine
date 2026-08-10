@@ -21,6 +21,13 @@ import Cocoa
 /// off the `show` and `close` methods, which would otherwise start a sampler
 /// that nothing ever stops on the day a popover declines to appear. `stop()`
 /// is idempotent, so the belt-and-braces call in `close()` is free.
+///
+/// The second trap, which is the same trap read the other way: `isShown` is not
+/// the question "is the panel up". It stays true for the whole half-second the
+/// dismissal animates, so a panel asked for again inside that window would be
+/// asked for while the old one is still nominally on screen. `isOpen` is
+/// tracked from `popoverWillShow` and `popoverWillClose` instead, which are the
+/// two moments the answer actually changes.
 final class ActivityPanelController: NSObject, NSPopoverDelegate {
 
     /// One second. Fast enough that the sparklines move, slow enough that the
@@ -41,7 +48,17 @@ final class ActivityPanelController: NSObject, NSPopoverDelegate {
         // A scroll view, not because the panel scrolls on this Mac, but because
         // a chip with more clusters than this one would otherwise produce a
         // popover taller than the screen it opens on.
-        scroll.hasVerticalScroller = false
+        //
+        // The scroller is real, and overlay in both senses: it costs no width
+        // on the Macs that never need it, and the panel's width is fixed, so a
+        // legacy scroller would take fifteen points out of the content and set
+        // the whole thing scrolling sideways as well. Content that runs past
+        // the cap with nothing on screen to say so is content nobody scrolls
+        // to, so `received` flashes the scroller the first time a session grows
+        // past the cap, which is the platform's own way of saying "more below".
+        scroll.hasVerticalScroller = true
+        scroll.scrollerStyle = .overlay
+        scroll.autohidesScrollers = true
         scroll.hasHorizontalScroller = false
         scroll.drawsBackground = false
         scroll.automaticallyAdjustsContentInsets = false
@@ -68,7 +85,10 @@ final class ActivityPanelController: NSObject, NSPopoverDelegate {
         monitor.stop()
     }
 
-    var isOpen: Bool { popover.isShown }
+    /// Whether the panel is up and staying up. False from the moment a close
+    /// begins, which is a good half-second before the popover stops being
+    /// `isShown`.
+    private(set) var isOpen = false
 
     // MARK: - the two verbs
 
@@ -82,7 +102,19 @@ final class ActivityPanelController: NSObject, NSPopoverDelegate {
     /// bar. `statusItem.button` passes straight in.
     func show(relativeTo anchor: NSView?) {
         guard let anchor, anchor.window != nil else { return }
-        guard !popover.isShown else { return }
+        guard !isOpen else { return }
+
+        // A dismissal that is still animating leaves the popover `isShown`, and
+        // `show` on a popover that is already shown does nothing at all. Ending
+        // the animation here is what turns "dismiss the panel and ask for it
+        // straight back" from a click that vanishes into a panel that reopens.
+        // The forced close runs the ordinary teardown through
+        // `popoverDidClose`, so the session that is going away is still closed
+        // properly before the next one starts.
+        if popover.isShown {
+            popover.animates = false
+            popover.close()
+        }
 
         // Without this the popover appears behind whatever is frontmost, since
         // Taurine is an accessory app and is never active on its own.
@@ -92,7 +124,12 @@ final class ActivityPanelController: NSObject, NSPopoverDelegate {
     }
 
     /// Close the panel and give everything back. Idempotent.
+    ///
+    /// `isOpen` is answered here rather than left to `popoverWillClose`,
+    /// because a popover that was never shown sends neither callback and the
+    /// panel would then claim to be up for the rest of the process.
     func close() {
+        isOpen = false
         popover.performClose(nil)
         stopAndForget()
     }
@@ -100,10 +137,22 @@ final class ActivityPanelController: NSObject, NSPopoverDelegate {
     // MARK: - lifecycle
 
     func popoverWillShow(_ notification: Notification) {
+        isOpen = true
         monitor.start(interval: Self.interval)
     }
 
+    /// The panel is on its way out from here, whichever route asked for it.
+    /// Nothing is torn down yet: `didClose` does that, once the animation has
+    /// finished and the popover is genuinely gone.
+    func popoverWillClose(_ notification: Notification) {
+        isOpen = false
+    }
+
     func popoverDidClose(_ notification: Notification) {
+        // A close that a re-open overtook: `show` cut the animation short and
+        // has already started the next session. Tearing down here would stop
+        // the timer of a panel that is on screen.
+        guard !isOpen else { return }
         stopAndForget()
     }
 
@@ -115,15 +164,27 @@ final class ActivityPanelController: NSObject, NSPopoverDelegate {
     private func stopAndForget() {
         monitor.stop()
         panel.forget()
+        flashedScrollers = false
     }
 
     // MARK: - samples
 
+    /// Whether this session has already been told there is more below. Once
+    /// per session: a scroller that flashed every second would be a tic.
+    private var flashedScrollers = false
+
     private func received(_ sample: ActivitySample) {
         panel.update(sample)
 
-        let height = min(panel.preferredHeight, ActivityTheme.maximumHeight)
-        let size = CGSize(width: ActivityTheme.width, height: height)
+        let wanted = panel.preferredHeight
+        let size = CGSize(width: ActivityTheme.width,
+                          height: min(wanted, ActivityTheme.maximumHeight))
+
+        if wanted > ActivityTheme.maximumHeight, !flashedScrollers {
+            flashedScrollers = true
+            scroll.flashScrollers()
+        }
+
         guard popover.contentSize != size else { return }
         popover.contentSize = size
     }

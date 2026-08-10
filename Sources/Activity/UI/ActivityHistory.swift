@@ -13,10 +13,10 @@ import Foundation
 ///
 /// The trap: `storage` is not in chronological order once the ring has wrapped,
 /// and reading it directly gives a sparkline with a seam in the middle where
-/// the write head is. Everything that draws must go through `ordered`, which is
-/// the only place that knows where the head sits. `latest` exists for the same
-/// reason: `storage.last` is the newest value only until the first wrap, and
-/// then it is off by one for the rest of the session.
+/// the write head is. Everything that reads must go through `ordered`, which is
+/// the only place that knows where the head sits; in particular `storage.last`
+/// is the newest value only until the first wrap and is off by one for the rest
+/// of the session, while `ordered.last` is right throughout.
 struct ActivityHistory {
 
     /// Sixty samples at the panel's one-second interval.
@@ -31,8 +31,6 @@ struct ActivityHistory {
     /// How many values are actually stored, which is less than `capacity`
     /// until the panel has been open for a minute.
     var count: Int { storage.count }
-
-    var isEmpty: Bool { storage.isEmpty }
 
     init(capacity: Int = ActivityHistory.oneMinute) {
         self.capacity = max(1, capacity)
@@ -58,13 +56,6 @@ struct ActivityHistory {
     var ordered: [Double] {
         guard storage.count == capacity, head != 0 else { return storage }
         return Array(storage[head...]) + Array(storage[..<head])
-    }
-
-    /// The most recent value, or nil while nothing has been recorded.
-    var latest: Double? {
-        guard !storage.isEmpty else { return nil }
-        guard storage.count == capacity else { return storage.last }
-        return storage[(head + capacity - 1) % capacity]
     }
 
     /// The largest value inside the window. Values that have been evicted do

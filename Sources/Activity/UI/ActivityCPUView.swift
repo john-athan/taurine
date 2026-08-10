@@ -92,7 +92,7 @@ final class ActivityCPUView: ActivitySectionView {
                                width: clockWidth, height: row.height)
             if let mhz = cluster.frequencyMHz {
                 ActivityDraw.text(ActivityFormat.megahertz(mhz), font: ActivityTheme.smallValue,
-                                  color: .tertiaryLabelColor, in: clock, align: .right)
+                                  color: ActivityTheme.quietData, in: clock, align: .right)
             }
             percentRight = clock.minX - Self.columnGap
         }

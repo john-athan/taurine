@@ -22,15 +22,22 @@ enum ActivityDraw {
 
     // MARK: - text
 
-    @discardableResult
+    /// One line of text, centred vertically in `rect` and truncated if it does
+    /// not fit.
+    ///
+    /// Every mark on this panel is one line: a label, a value, a clock, a unit.
+    /// Prose is the footer's job and the footer is a text field, which measures
+    /// its own wrapped height and so can never reserve a different number of
+    /// lines than it draws. Wrapping here would be a second, unmeasured way of
+    /// doing the same thing.
     static func text(_ string: String, font: NSFont, color: NSColor,
                      in rect: CGRect, align: NSTextAlignment = .left,
-                     kern: CGFloat = 0, lines: Int = 1) -> CGSize {
-        guard !string.isEmpty, rect.width > 0 else { return .zero }
+                     kern: CGFloat = 0) {
+        guard !string.isEmpty, rect.width > 0 else { return }
 
         let paragraph = NSMutableParagraphStyle()
         paragraph.alignment = align
-        paragraph.lineBreakMode = lines == 1 ? .byTruncatingTail : .byWordWrapping
+        paragraph.lineBreakMode = .byTruncatingTail
 
         var attributes: [NSAttributedString.Key: Any] = [
             .font: font, .foregroundColor: color, .paragraphStyle: paragraph,
@@ -39,14 +46,11 @@ enum ActivityDraw {
 
         let attributed = NSAttributedString(string: string, attributes: attributes)
         let size = attributed.boundingRect(
-            with: CGSize(width: rect.width, height: lines == 1 ? .greatestFiniteMagnitude
-                                                               : CGFloat(lines) * font.boundingRectForFont.height),
-            options: lines == 1 ? [] : [.usesLineFragmentOrigin])
+            with: CGSize(width: rect.width, height: .greatestFiniteMagnitude), options: [])
 
         let y = rect.minY + (rect.height - size.height) / 2
         attributed.draw(with: CGRect(x: rect.minX, y: y, width: rect.width, height: size.height),
                         options: [.usesLineFragmentOrigin])
-        return CGSize(width: ceil(size.width), height: ceil(size.height))
     }
 
     /// How wide a string wants to be, for laying a row out around it.
@@ -55,19 +59,6 @@ enum ActivityDraw {
         var attributes: [NSAttributedString.Key: Any] = [.font: font]
         if kern != 0 { attributes[.kern] = kern }
         return ceil(NSAttributedString(string: string, attributes: attributes).size().width)
-    }
-
-    /// How tall a string wraps to inside a given width.
-    static func height(_ string: String, font: NSFont, width: CGFloat, lines: Int) -> CGFloat {
-        guard !string.isEmpty, width > 0 else { return 0 }
-        let paragraph = NSMutableParagraphStyle()
-        paragraph.lineBreakMode = .byWordWrapping
-        let attributed = NSAttributedString(string: string,
-                                            attributes: [.font: font, .paragraphStyle: paragraph])
-        let cap = CGFloat(lines) * ceil(font.boundingRectForFont.height)
-        let box = attributed.boundingRect(with: CGSize(width: width, height: cap),
-                                          options: [.usesLineFragmentOrigin])
-        return min(cap, ceil(box.height))
     }
 
     // MARK: - bars

@@ -44,6 +44,20 @@ enum ActivitySpeech {
 
     // MARK: - the tiles
 
+    /// What a tile is called out loud. The drawn titles are set in capitals for
+    /// the eye, and handed to a reader as written they are either an initialism
+    /// somebody has to expand ("CPU") or, once capitalised, a nonsense word
+    /// ("Cpu"). The two initialisms become the same words `power` already uses
+    /// when it reads the parts out, so the panel calls a thing by one name
+    /// whether it is naming a tile or reading one.
+    static func tileName(_ title: String) -> String {
+        switch title {
+        case "CPU": return "Processor"
+        case "GPU": return "Graphics"
+        default:    return title.capitalized
+        }
+    }
+
     /// `E` becomes "efficiency cores", `P1` becomes "performance cluster 1".
     static func clusterName(_ cluster: CPUActivity.Cluster) -> String {
         let kind = cluster.kind == .efficiency ? "efficiency" : "performance"

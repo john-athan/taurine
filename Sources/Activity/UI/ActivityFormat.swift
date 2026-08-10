@@ -23,11 +23,13 @@ import Foundation
 ///     readout whose digits move sideways is unreadable at a glance. The
 ///     monospaced-digit fonts in `ActivityTheme` are the other half of that.
 ///
-/// The trap: rounding can push a value into the next unit. 999_999 B/s scaled
-/// to kB/s is 999.999, which prints with no decimals as "1000 kB/s", a unit
-/// nobody uses. Every formatter here re-checks the value *after* deciding its
-/// precision and carries into the next unit if it has to, which is why the
-/// scaling loop below runs a second time rather than once.
+/// The trap: rounding can push a value past the boundary that chose its
+/// precision. 999_999 B/s scaled to kB/s is 999.999, which prints with no
+/// decimals as "1000 kB/s", a unit nobody uses; 99.95 W printed with one
+/// decimal is "100.0 W", two characters wider than the "100 W" it becomes a
+/// second later. Every formatter here re-checks the value *after* deciding its
+/// precision and carries if it has to, which is why both `wattsNumber` and the
+/// scaling loop below decide the precision twice rather than once.
 enum ActivityFormat {
 
     /// What a number becomes when it is not a number. Sections whose data is
@@ -59,9 +61,31 @@ enum ActivityFormat {
     /// 0.07 W and one at 0.00 W are a meaningful difference and "0.1 W" hides
     /// it.
     static func watts(_ value: Double, unit: String = "W") -> String {
-        guard value.isFinite, value >= 0 else { return unknown }
-        let digits = value < 1 ? 2 : (value < 100 ? 1 : 0)
-        return "\(String(format: "%.\(digits)f", value)) \(unit)"
+        guard let number = wattsNumber(value) else { return unknown }
+        return "\(number) \(unit)"
+    }
+
+    /// The digits of a wattage with no unit attached, or nil when the value is
+    /// not a reading. The power headline draws the number and its unit in two
+    /// different fonts, and asking for the number on its own is how it gets
+    /// them without taking a formatted string apart again afterwards.
+    ///
+    /// The carry lives here. One decimal is right up to a hundred watts, but
+    /// 99.95 printed with one decimal is "100.0", which is wider than both the
+    /// "99.9" before it and the "100" after it: on a Mac hovering at a hundred
+    /// watts the headline would jump two characters wider several times a
+    /// minute. Deciding the precision a second time, from the value as it would
+    /// print rather than as it was measured, is what stops that.
+    ///
+    /// The one-watt boundary deliberately does not carry. "1.00" is the same
+    /// width as the "0.99" before it, so there is no jitter to prevent, and the
+    /// two decimals are the whole reason sub-watt values are readable.
+    static func wattsNumber(_ value: Double) -> String? {
+        guard value.isFinite, value >= 0 else { return nil }
+        var digits = value < 1 ? 2 : (value < 100 ? 1 : 0)
+        let power = pow(10.0, Double(digits))
+        if digits > 0, (value * power).rounded() / power >= 100 { digits = 0 }
+        return String(format: "%.\(digits)f", value)
     }
 
     /// A clock, given in megahertz, shown in whichever unit reads shorter.

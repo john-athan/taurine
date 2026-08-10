@@ -13,6 +13,14 @@ func runActivitySpeechTests() {
         CPUActivity.Cluster(id: id, kind: kind, cores: cores, frequencyMHz: mhz, activeResidency: nil)
     }
 
+    Check.suite("speech: a tile is named, not spelled") {
+        Check.equal(ActivitySpeech.tileName("CPU"), "Processor", "\"Cpu\" is not a word")
+        Check.equal(ActivitySpeech.tileName("GPU"), "Graphics", "and neither is \"Gpu\"")
+        Check.equal(ActivitySpeech.tileName("POWER"), "Power", "the rest are words already")
+        Check.equal(ActivitySpeech.tileName("MEMORY"), "Memory", "and are read as themselves")
+        Check.equal(ActivitySpeech.tileName("NETWORK"), "Network", "however many tiles are added")
+    }
+
     Check.suite("speech: cluster names become words") {
         Check.equal(ActivitySpeech.clusterName(cluster("E", .efficiency, [0])),
                     "efficiency cores", "an unsplit level has no index")

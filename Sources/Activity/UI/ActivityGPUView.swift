@@ -13,10 +13,13 @@ import Cocoa
 ///
 /// The trap: `utilization` and `frequencyMHz` come from different places and
 /// fail independently. A Mac can know how busy its GPU is without knowing how
-/// fast it is running, so the clock is drawn only when it is there, and its
-/// column simply stays empty otherwise rather than the bar stretching into it.
-/// Keeping the bar's width fixed means the GPU meter and the memory meter below
-/// it still line up, which is most of why the panel looks composed.
+/// fast it is running, so the clock column exists only when there is a clock to
+/// put in it, and the meter takes that width back rather than stopping short of
+/// an empty column. There is no right edge to line up with: the memory bar
+/// below is full width whatever the GPU knows about itself, so a meter that
+/// held a fixed width would line up with nothing and read as a bar that failed
+/// to finish drawing. Every tile shares its left edge, which is the alignment
+/// the eye actually follows down a column this narrow.
 final class ActivityGPUView: ActivitySectionView {
 
     private static let clockColumn: CGFloat = 62
@@ -51,7 +54,7 @@ final class ActivityGPUView: ActivitySectionView {
             let clock = CGRect(x: rect.maxX - Self.clockColumn, y: rect.minY,
                                width: Self.clockColumn, height: rect.height)
             ActivityDraw.text(ActivityFormat.megahertz(mhz), font: ActivityTheme.smallValue,
-                              color: .tertiaryLabelColor, in: clock, align: .right)
+                              color: ActivityTheme.quietData, in: clock, align: .right)
             barRight = clock.minX - Self.columnGap
         }
 

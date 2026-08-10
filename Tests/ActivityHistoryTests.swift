@@ -10,9 +10,9 @@ func runActivityHistoryTests() {
     Check.suite("history: an empty buffer says nothing") {
         let h = ActivityHistory(capacity: 60)
         Check.equal(h.count, 0, "nothing recorded")
-        Check.that(h.isEmpty, "and it says so")
+        Check.equal(h.ordered.count, 0, "and it says so")
         Check.equal(h.ordered, [], "no values to draw")
-        Check.isNil(h.latest, "no latest value")
+        Check.isNil(h.ordered.last, "no latest value")
         Check.isNil(h.maximum, "and no maximum to scale an axis by")
     }
 
@@ -29,7 +29,7 @@ func runActivityHistoryTests() {
         h.append(1); h.append(2); h.append(3)
         Check.equal(h.count, 3, "three of five slots used")
         Check.equal(h.ordered, [1, 2, 3], "in the order they arrived")
-        Check.equal(h.latest, 3, "the newest is the last one appended")
+        Check.equal(h.ordered.last, 3, "the newest is the last one appended")
         Check.equal(h.maximum, 3, "the largest so far")
     }
 
@@ -38,7 +38,7 @@ func runActivityHistoryTests() {
         for v in [1.0, 2, 3, 4] { h.append(v) }
         Check.equal(h.count, 4, "full")
         Check.equal(h.ordered, [1, 2, 3, 4], "no seam yet")
-        Check.equal(h.latest, 4, "newest")
+        Check.equal(h.ordered.last, 4, "newest")
     }
 
     Check.suite("history: the wrap, where the seam would be") {
@@ -46,16 +46,16 @@ func runActivityHistoryTests() {
         for v in [1.0, 2, 3, 4, 5] { h.append(v) }
         Check.equal(h.count, 4, "capacity is a hard ceiling")
         Check.equal(h.ordered, [2, 3, 4, 5], "the oldest was evicted, the rest kept their order")
-        Check.equal(h.latest, 5, "newest survives the wrap")
+        Check.equal(h.ordered.last, 5, "newest survives the wrap")
 
         h.append(6)
         Check.equal(h.ordered, [3, 4, 5, 6], "and again")
-        Check.equal(h.latest, 6, "still newest")
+        Check.equal(h.ordered.last, 6, "still newest")
 
         // All the way around, so the write head lands back on slot zero.
         for v in [7.0, 8, 9, 10] { h.append(v) }
         Check.equal(h.ordered, [7, 8, 9, 10], "a whole lap leaves the order intact")
-        Check.equal(h.latest, 10, "and the head back where it started")
+        Check.equal(h.ordered.last, 10, "and the head back where it started")
     }
 
     Check.suite("history: a spike leaves the axis when it leaves the graph") {
@@ -80,16 +80,16 @@ func runActivityHistoryTests() {
         var h = ActivityHistory(capacity: 1)
         h.append(1); h.append(2)
         Check.equal(h.ordered, [2], "one slot, latest wins")
-        Check.equal(h.latest, 2, "and it is the latest")
+        Check.equal(h.ordered.last, 2, "and it is the latest")
     }
 
     Check.suite("history: closing the panel forgets the minute") {
         var h = ActivityHistory(capacity: 3)
         for v in [1.0, 2, 3, 4] { h.append(v) }
         h.forget()
-        Check.that(h.isEmpty, "nothing survives the close")
+        Check.equal(h.count, 0, "nothing survives the close")
         Check.equal(h.ordered, [], "no stale values to draw")
-        Check.isNil(h.latest, "and no stale latest")
+        Check.isNil(h.ordered.last, "and no stale latest")
 
         // The head must have been reset too, or the next lap comes out rotated.
         h.append(9); h.append(8)

@@ -93,15 +93,20 @@ final class ActivityTrafficView: ActivitySectionView {
 
     private func draw(name: String, rate: Double, history: ActivityHistory,
                       scale: Double, in row: CGRect) {
-        ActivityDraw.text(name, font: ActivityTheme.caption, color: .tertiaryLabelColor,
+        ActivityDraw.text(name, font: ActivityTheme.caption, color: ActivityTheme.chrome,
                           in: CGRect(x: row.minX, y: row.minY,
                                      width: Self.directionColumn, height: row.height))
 
         let value = CGRect(x: row.minX + Self.directionColumn, y: row.minY,
                            width: Self.valueColumn, height: row.height)
-        // An idle pipe is quiet typography as well as a flat line.
+        // An idle pipe is quiet typography as well as a flat line. The weight
+        // has to be chosen by the same test the formatter uses, not by `> 0`
+        // alone: a NaN loses every comparison and would be drawn quietly, and
+        // an infinity wins them all and would be emphasised, while both of them
+        // print as "n/a" and are the one case worth no emphasis at all.
+        let flowing = rate.isFinite && rate > 0
         ActivityDraw.text(ActivityFormat.bytesPerSecond(rate), font: ActivityTheme.value,
-                          color: rate > 0 ? .labelColor : .tertiaryLabelColor,
+                          color: flowing ? .labelColor : ActivityTheme.quietData,
                           in: value, align: .right)
 
         let left = value.maxX + Self.columnGap

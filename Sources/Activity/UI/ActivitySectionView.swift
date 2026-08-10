@@ -76,8 +76,8 @@ class ActivitySectionView: NSView {
             ActivityDraw.text(title, font: ActivityTheme.title, color: .secondaryLabelColor,
                               in: row, align: .left, kern: ActivityTheme.titleKern)
             if let value = titleValue {
-                ActivityDraw.text(value, font: ActivityTheme.smallValue, color: .tertiaryLabelColor,
-                                  in: row, align: .right)
+                ActivityDraw.text(value, font: ActivityTheme.smallValue,
+                                  color: ActivityTheme.quietData, in: row, align: .right)
             }
             body = CGRect(x: 0, y: row.maxY, width: bounds.width, height: bounds.height - row.height)
         }
@@ -92,6 +92,8 @@ class ActivitySectionView: NSView {
     // the panel is one unlabelled group and the reader gets silence.
     override func isAccessibilityElement() -> Bool { hasContent }
     override func accessibilityRole() -> NSAccessibility.Role? { .staticText }
-    override func accessibilityLabel() -> String? { title.isEmpty ? nil : title.capitalized }
+    override func accessibilityLabel() -> String? {
+        title.isEmpty ? nil : ActivitySpeech.tileName(title)
+    }
     override func accessibilityValue() -> Any? { spokenValue }
 }

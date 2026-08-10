@@ -11,11 +11,17 @@ func runActivityLayoutTests() {
 
     let epsilon: CGFloat = 0.0001
 
+    /// Where a span stops. `ActivityLayout.Span` carries an origin and a
+    /// length, because that is what every caller draws with; the far edge is
+    /// only ever wanted here, where the question is whether two spans collide
+    /// or whether a row overran itself.
+    func end(_ span: ActivityLayout.Span) -> CGFloat { span.origin + span.length }
+
     Check.suite("layout: a row of bars fills its width exactly") {
         let spans = ActivityLayout.bars(count: 5, width: 154, gap: 3, minimum: 2)
         Check.equal(spans.count, 5, "one span per core")
         Check.close(Double(spans[0].origin), 0, tolerance: 0.0001, "the row starts at zero")
-        Check.close(Double(spans[4].end), 154, tolerance: 0.0001, "and ends on the right edge")
+        Check.close(Double(end(spans[4])), 154, tolerance: 0.0001, "and ends on the right edge")
         Check.that(Set(spans.map { (($0.length * 1000).rounded()) }).count == 1,
                    "every bar is the same width")
     }
@@ -23,10 +29,10 @@ func runActivityLayoutTests() {
     Check.suite("layout: bars never overlap") {
         for count in [1, 2, 3, 4, 5, 8, 14, 20, 40] {
             let spans = ActivityLayout.bars(count: count, width: 120, gap: 3, minimum: 2)
-            let overlapping = zip(spans, spans.dropFirst()).contains { $0.end > $1.origin + epsilon }
+            let overlapping = zip(spans, spans.dropFirst()).contains { end($0) > $1.origin + epsilon }
             Check.that(!overlapping, "no overlap with \(count) bars")
             Check.that(spans.allSatisfy { $0.length > 0 }, "every bar has width with \(count) bars")
-            Check.that((spans.last?.end ?? 0) <= 120 + epsilon, "nothing draws past the row with \(count) bars")
+            Check.that((spans.last.map(end) ?? 0) <= 120 + epsilon, "nothing draws past the row with \(count) bars")
         }
     }
 
@@ -40,21 +46,21 @@ func runActivityLayoutTests() {
     Check.suite("layout: the gap is what gets sacrificed when the row is crowded") {
         // Twenty bars, three-point gaps and a four-point minimum need 137 points.
         let roomy = ActivityLayout.bars(count: 20, width: 200, gap: 3, minimum: 4)
-        Check.close(Double(roomy[1].origin - roomy[0].end), 3, tolerance: epsilon,
+        Check.close(Double(roomy[1].origin - end(roomy[0])), 3, tolerance: epsilon,
                     "a roomy row keeps its full gap")
 
         let tight = ActivityLayout.bars(count: 20, width: 100, gap: 3, minimum: 4)
-        let tightGap = tight[1].origin - tight[0].end
+        let tightGap = tight[1].origin - end(tight[0])
         Check.that(tightGap >= -epsilon && tightGap < 3, "a tight row shrinks the gap first")
         Check.that(tight.allSatisfy { $0.length >= 4 - epsilon }, "and keeps the bars legible")
-        Check.close(Double(tight[19].end), 100, tolerance: epsilon, "still filling the row exactly")
+        Check.close(Double(end(tight[19])), 100, tolerance: epsilon, "still filling the row exactly")
     }
 
     Check.suite("layout: an impossible row stays inside itself") {
         // Forty bars in sixty points cannot all be four points wide.
         let spans = ActivityLayout.bars(count: 40, width: 60, gap: 3, minimum: 4)
         Check.equal(spans.count, 40, "no core is dropped")
-        Check.close(Double(spans[39].end), 60, tolerance: epsilon,
+        Check.close(Double(end(spans[39])), 60, tolerance: epsilon,
                     "cramped, but never drawn outside the row")
         Check.that(spans.allSatisfy { $0.length > 0 }, "and every bar still exists")
     }
@@ -75,7 +81,7 @@ func runActivityLayoutTests() {
         let slots = ActivityLayout.bars(count: 5, width: 154, gap: 3, minimum: 2, maximum: 9)
         let fourCoreRow = Array(slots.prefix(4))
         Check.equal(fourCoreRow.count, 4, "a four-core cluster fills four of the five slots")
-        Check.that(fourCoreRow.last!.end < slots[4].origin, "and leaves the fifth empty")
+        Check.that(end(fourCoreRow.last!) < slots[4].origin, "and leaves the fifth empty")
         Check.that(Set(slots.map { ($0.length * 1000).rounded() }).count == 1,
                    "every row therefore draws bars of identical width")
     }
@@ -84,16 +90,16 @@ func runActivityLayoutTests() {
         let roomy = ActivityLayout.bars(count: 4, width: 154, gap: 3, minimum: 2, maximum: 9)
         Check.that(roomy.allSatisfy { $0.length <= 9 + epsilon },
                    "four cores do not become four slabs")
-        Check.close(Double(roomy[3].end), 4 * 9 + 3 * 3, tolerance: epsilon,
+        Check.close(Double(end(roomy[3])), 4 * 9 + 3 * 3, tolerance: epsilon,
                     "the row is only as wide as the cap allows, and the rest is whitespace")
 
         let crowded = ActivityLayout.bars(count: 20, width: 154, gap: 3, minimum: 2, maximum: 9)
-        Check.close(Double(crowded[19].end), 154, tolerance: epsilon,
+        Check.close(Double(end(crowded[19])), 154, tolerance: epsilon,
                     "a crowded row still uses everything it is given")
         Check.that(crowded.allSatisfy { $0.length < 9 }, "and stays under the cap on its own")
 
         let uncapped = ActivityLayout.bars(count: 4, width: 154, gap: 3, minimum: 2)
-        Check.close(Double(uncapped[3].end), 154, tolerance: epsilon,
+        Check.close(Double(end(uncapped[3])), 154, tolerance: epsilon,
                     "without a cap the row fills its width, which is what meters want")
     }
 
@@ -200,20 +206,20 @@ func runActivityLayoutTests() {
         let spans = ActivityLayout.distribute([60, 62, 96], in: 288, minimumGap: 8)
         Check.equal(spans.count, 3, "one span per item")
         Check.close(Double(spans[0].origin), 0, tolerance: epsilon, "first item is flush left")
-        Check.close(Double(spans[2].end), 288, tolerance: epsilon, "last item is flush right")
+        Check.close(Double(end(spans[2])), 288, tolerance: epsilon, "last item is flush right")
         Check.equal(spans.map(\.length), [60, 62, 96],
                     "and every item keeps the width it asked for, so nothing truncates")
-        let gapA = spans[1].origin - spans[0].end
-        let gapB = spans[2].origin - spans[1].end
+        let gapA = spans[1].origin - end(spans[0])
+        let gapB = spans[2].origin - end(spans[1])
         Check.close(Double(gapA), Double(gapB), tolerance: epsilon, "the slack is shared evenly")
     }
 
     Check.suite("layout: a row that genuinely does not fit shares the loss") {
         let spans = ActivityLayout.distribute([200, 200], in: 100, minimumGap: 8)
-        Check.that(spans[1].end <= 100 + epsilon, "the row stays inside itself")
+        Check.that(end(spans[1]) <= 100 + epsilon, "the row stays inside itself")
         Check.close(Double(spans[0].length), Double(spans[1].length), tolerance: epsilon,
                     "both items shrink, rather than the last one taking all the truncation")
-        Check.close(Double(spans[1].origin - spans[0].end), 8, tolerance: epsilon,
+        Check.close(Double(spans[1].origin - end(spans[0])), 8, tolerance: epsilon,
                     "and the gap closes to its minimum first")
     }
 

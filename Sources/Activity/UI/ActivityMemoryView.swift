@@ -78,7 +78,7 @@ final class ActivityMemoryView: ActivitySectionView {
         let swap = memory.swapUsed > 0
             ? "Swap \(ActivityFormat.bytes(memory.swapUsed)) of \(ActivityFormat.bytes(memory.swapTotal))"
             : "Swap idle"
-        ActivityDraw.text(swap, font: ActivityTheme.smallValue, color: .tertiaryLabelColor,
+        ActivityDraw.text(swap, font: ActivityTheme.smallValue, color: ActivityTheme.quietData,
                           in: CGRect(x: rect.minX, y: rect.minY + Self.barRow + Self.legendRow,
                                      width: rect.width, height: Self.swapRow))
     }
@@ -107,12 +107,12 @@ final class ActivityMemoryView: ActivitySectionView {
 
             let nameWidth = ActivityDraw.width(names[index], font: ActivityTheme.footnote)
             let nameX = x + dot + dotGap
-            ActivityDraw.text(names[index], font: ActivityTheme.footnote, color: .tertiaryLabelColor,
+            ActivityDraw.text(names[index], font: ActivityTheme.footnote, color: ActivityTheme.chrome,
                               in: CGRect(x: nameX, y: rect.minY,
                                          width: nameWidth, height: rect.height))
             let valueX = nameX + nameWidth + nameGap
             ActivityDraw.text(values[index], font: ActivityTheme.legendValue,
-                              color: .secondaryLabelColor,
+                              color: ActivityTheme.quietData,
                               in: CGRect(x: valueX, y: rect.minY,
                                          width: max(0, x + span.length - valueX),
                                          height: rect.height))

@@ -19,6 +19,15 @@ import Cocoa
 ///     none of that and looks wrong in exactly one of those four, which is
 ///     always the one nobody checked.
 ///
+///   • **Data is never tertiary.** Composited over the window background,
+///     `tertiaryLabelColor` measures 1.88:1 in light appearance and 2.26:1 in
+///     dark, well under the 3:1 asked even of large text; `secondaryLabelColor`
+///     measures 3.95:1 and 5.89:1 and clears it in both. Tertiary is the right
+///     colour for a word that labels a column and the wrong colour for the
+///     number in it, so the two have separate names here (`chrome` and
+///     `quietData`) and the choice is made by what the text *is* rather than by
+///     how quiet somebody wanted it to look.
+///
 ///   • **Monospaced digits everywhere a number changes.** Not monospaced text:
 ///     `monospacedDigitSystemFont` keeps the letters proportional and pins the
 ///     digits to one width, so "8.1 W" becoming "14.2 W" moves nothing except
@@ -62,6 +71,16 @@ enum ActivityTheme {
             ? NSColor(calibratedRed: 1.00, green: 0.38, blue: 0.38, alpha: 1)
             : NSColor(calibratedRed: 0.82, green: 0.14, blue: 0.14, alpha: 1)
     }
+
+    /// A number that is not the headline: a cluster's clock, a tile's summary,
+    /// the swap line, a rate of zero. Quiet, but somebody has to be able to
+    /// read it, which is what rules `tertiaryLabelColor` out.
+    static var quietData: NSColor { .secondaryLabelColor }
+
+    /// Words that label a number rather than being one: "read", "Wired", "ANE".
+    /// Nothing is lost by skimming past them, so these are the faintest text on
+    /// the panel.
+    static var chrome: NSColor { .tertiaryLabelColor }
 
     /// The empty part of any meter.
     static var track: NSColor { .quaternaryLabelColor }
@@ -111,6 +130,12 @@ enum ActivityTheme {
     static var rowLabel: NSFont { .systemFont(ofSize: 10, weight: .semibold) }
     static var caption: NSFont { .systemFont(ofSize: 10, weight: .regular) }
     static var footnote: NSFont { .systemFont(ofSize: 9.5, weight: .regular) }
+
+    /// The footer's receipt line. Monospaced digits like every other number
+    /// that moves: the megabytes are re-read every second, and a footer that
+    /// changed width once a second would be the most distracting thing on a
+    /// panel whose whole job is to hold still.
+    static var receipt: NSFont { .monospacedDigitSystemFont(ofSize: 9.5, weight: .regular) }
 
     // MARK: - motion
 

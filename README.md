@@ -136,10 +136,11 @@ through IOReport, which an ordinary process may do, so the panel never asks for
 anything. See [ADR 3](docs/adr/0003-ioreport-for-power-without-root.md).
 
 **No cost while it is shut.** Nothing samples until the panel is on screen.
-Opening it creates the app's only repeating timer and opens the probes; closing
-it cancels the timer, closes the probes and throws the history away. The badge
-under the menu proves it: open the panel and it reads `1 timer`, close it and it
-reads `0 timers` again. See
+Opening it creates one repeating timer and opens the probes; closing it cancels
+the timer, closes the probes and throws the history away. The panel prints its
+own receipt while it is up, in the same voice as the menu badge:
+`This panel: 1 timer · 1 sample a second · Taurine 12.4 MB`, with the megabytes
+read live from the kernel. See
 [ADR 2](docs/adr/0002-the-activity-panel-costs-nothing-while-closed.md).
 
 Anything this Mac cannot answer is left out rather than drawn as a zero, with a

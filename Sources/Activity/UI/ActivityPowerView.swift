@@ -15,9 +15,12 @@ import Cocoa
 /// number's own measured width buys back the room for the sparkline.
 ///
 /// The sparkline's axis is snapped to a round ceiling rather than tracking the
-/// observed peak, and the ceiling is printed on the title row. A sparkline with
-/// no stated scale is a shape, not a measurement, and a scale that re-fits
-/// itself every second makes the line twitch when the machine is steady.
+/// observed peak, because a scale that re-fits itself every second makes the
+/// line twitch when the machine is steady. The number on the title row is the
+/// peak, not that ceiling: the ceiling is a drawing decision and the peak is a
+/// measurement, and since the peak is by definition the highest point on the
+/// line, it labels the tallest thing in the graph, which is the one place a
+/// reader looks when they want a number off it.
 ///
 /// The trap: `totalWatts` is not always the sum of the parts. When the chip
 /// publishes a package counter that is the headline, and it includes fabric and
@@ -36,7 +39,9 @@ final class ActivityPowerView: ActivitySectionView {
 
     init() { super.init(title: "POWER") }
 
-    override var hasContent: Bool { power?.totalWatts != nil }
+    /// `take` refuses anything that is not a readable wattage, so holding a
+    /// sample at all is the same statement as having something to draw.
+    override var hasContent: Bool { power != nil }
     override var bodyHeight: CGFloat { Self.heroHeight + Self.partsHeight }
 
     override var titleValue: String? {
@@ -53,8 +58,17 @@ final class ActivityPowerView: ActivitySectionView {
 
     override var spokenValue: String { power.map(ActivitySpeech.power) ?? "" }
 
+    /// The one gate on this tile. A headline that is not a number is not a
+    /// reading, so it is refused here rather than downstream, where three
+    /// separate things would each have to cope with it and would each have to
+    /// agree: `hasContent` would say the tile has something to show, the
+    /// history would record the NaN as a zero and print "peak 0.00 W" beside
+    /// it, and the headline would draw "n/a" in thirty points of accent red
+    /// with a " W" welded on. Refusing the sample leaves the tile exactly as a
+    /// Mac with no energy counters leaves it: absent, and the panel shorter.
     override func take(_ sample: ActivitySample) {
-        guard let power = sample.power, let total = power.totalWatts else { return }
+        guard let power = sample.power, let total = power.totalWatts,
+              total.isFinite, total >= 0 else { return }
         self.power = power
         history.append(total)
     }
@@ -65,10 +79,11 @@ final class ActivityPowerView: ActivitySectionView {
     }
 
     override func drawBody(in rect: CGRect) {
-        guard let power, let total = power.totalWatts else { return }
+        guard let power, let total = power.totalWatts,
+              let number = ActivityFormat.wattsNumber(total) else { return }
 
         let hero = CGRect(x: rect.minX, y: rect.minY, width: rect.width, height: Self.heroHeight)
-        let numberWidth = drawHeadline(total, in: hero)
+        let numberWidth = drawHeadline(number, in: hero)
 
         let left = hero.minX + numberWidth + Self.sparklineInset
         let graph = CGRect(x: left, y: hero.minY + 5, width: hero.maxX - left, height: hero.height - 10)
@@ -79,9 +94,14 @@ final class ActivityPowerView: ActivitySectionView {
     }
 
     /// Draws "14.2" big and " W" small, and reports how much room the pair took.
-    private func drawHeadline(_ total: Double, in rect: CGRect) -> CGFloat {
-        let full = ActivityFormat.watts(total)
-        let number = full.hasSuffix(" W") ? String(full.dropLast(2)) : full
+    ///
+    /// The number comes from the formatter already separated from its unit.
+    /// Taking `"14.2 W"` apart afterwards worked until the day the value was
+    /// not a number: `"n/a"` has no unit to strip, so the tile printed "n/a"
+    /// and welded a red " W" onto it. `take` no longer lets such a value in,
+    /// and asking for the digits directly means there is no string surgery left
+    /// to get wrong if it ever did.
+    private func drawHeadline(_ number: String, in rect: CGRect) -> CGFloat {
         let accent = ActivityTheme.accent
 
         let numberWidth = ActivityDraw.width(number, font: ActivityTheme.hero)
@@ -135,7 +155,7 @@ final class ActivityPowerView: ActivitySectionView {
 
         for (index, part) in parts.enumerated() {
             let x = rect.minX + spans[index].origin
-            ActivityDraw.text(part.0, font: ActivityTheme.title, color: .tertiaryLabelColor,
+            ActivityDraw.text(part.0, font: ActivityTheme.title, color: ActivityTheme.chrome,
                               in: CGRect(x: x, y: rect.minY,
                                          width: labels[index], height: rect.height),
                               kern: ActivityTheme.titleKern)
