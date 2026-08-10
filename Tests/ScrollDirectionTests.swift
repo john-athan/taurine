@@ -310,7 +310,7 @@ func runScrollDirectionTests() {
 
         // The test binary is not the app bundle, so on a normal machine it has
         // no Accessibility grant and must say so rather than pretend.
-        if ScrollPermission.isGranted {
+        if AccessibilityPermission.isGranted {
             Check.that(status == .correcting(.wheel) || status == .correcting(.continuousSurface),
                        "granted: the tap is armed and one class is being corrected")
             Check.isNil(fixer.explanation, "and there is nothing to explain")
@@ -334,9 +334,9 @@ func runScrollDirectionTests() {
         // rebuilt it would keep the count at one and still be wrong.
         let fixer = ScrollDirectionFixer(defaults: scratchDefaults(), key: "fixScrollDirection")
         let first = fixer.setEnabled(true)
-        let armed = liveTapThreadIDs()
+        let armed = TapThreads.live(named: "taurine.scroll")
 
-        if ScrollPermission.isGranted {
+        if AccessibilityPermission.isGranted {
             Check.equal(armed.count, 1, "granted: exactly one tap thread is running")
         } else {
             Check.equal(armed.count, 0, "not granted: no tap thread is ever started")
@@ -344,7 +344,7 @@ func runScrollDirectionTests() {
 
         Check.equal(fixer.start(), first, "the second start reports the same status")
         Check.equal(fixer.start(), first, "and so does the third")
-        Check.equal(liveTapThreadIDs(), armed,
+        Check.equal(TapThreads.live(named: "taurine.scroll"), armed,
                     "and the tap thread is the same one: none added, none replaced")
 
         fixer.setEnabled(false)
@@ -373,9 +373,9 @@ func runScrollDirectionTests() {
             Check.equal(f.status, .off, "each one reports itself off")
             fixers.append(f)
         }
-        Check.that(liveTapThreadIDs().count <= 1,
+        Check.that(TapThreads.live(named: "taurine.scroll").count <= 1,
                    "eight armed and stopped back to back leave no pile of live tap threads "
-                 + "(saw \(liveTapThreadIDs().count))")
+                 + "(saw \(TapThreads.live(named: "taurine.scroll").count))")
         for f in fixers { f.setEnabled(false) }
     }
 
@@ -391,7 +391,7 @@ func runScrollDirectionTests() {
             fixer.setEnabled(false)
         }
         Check.equal(fixer.reArmCount, 0, "40 clean start/stop cycles are not a fault to report")
-        Check.equal(liveTapThreadIDs(), [], "and leave no tap thread behind")
+        Check.equal(TapThreads.live(named: "taurine.scroll"), [], "and leave no tap thread behind")
 
         fixer.setEnabled(true)
         Check.that(!fixer.tooltip.contains("Re-armed"), "so the tooltip invents no problem")
@@ -405,61 +405,6 @@ func runScrollDirectionTests() {
         Check.that(!fixer.tooltip.isEmpty, "on: describes what it is doing, or what is wrong")
         fixer.setEnabled(false)
     }
-}
-
-// MARK: - watching the tap thread
-
-/// The thread ids of every live scroll tap thread in this process.
-///
-/// The tap thread is the only outward sign that a tap exists, so it is what the
-/// lifecycle tests observe. Ids rather than a count, because "starting twice
-/// does not arm a second tap" and "there is one tap thread" are different
-/// claims, and only the first one is the promise being made.
-private func liveTapThreadIDs() -> Set<UInt64> {
-    var ports: thread_act_array_t?
-    var count: mach_msg_type_number_t = 0
-    guard task_threads(mach_task_self_, &ports, &count) == KERN_SUCCESS, let ports else { return [] }
-    defer {
-        for i in 0..<Int(count) { mach_port_deallocate(mach_task_self_, ports[i]) }
-        vm_deallocate(mach_task_self_, vm_address_t(UInt(bitPattern: ports)),
-                      vm_size_t(Int(count) * MemoryLayout<thread_t>.size))
-    }
-
-    var found: Set<UInt64> = []
-    for i in 0..<Int(count) where threadName(ports[i]).contains("taurine.scroll") {
-        if let id = threadID(ports[i]) { found.insert(id) }
-    }
-    return found
-}
-
-/// The name `Thread.name` put on the underlying pthread, or "" if it has none.
-private func threadName(_ port: thread_act_t) -> String {
-    var info = thread_extended_info_data_t()
-    var size = mach_msg_type_number_t(MemoryLayout<thread_extended_info_data_t>.size
-                                      / MemoryLayout<natural_t>.size)
-    let ok = withUnsafeMutablePointer(to: &info) {
-        $0.withMemoryRebound(to: integer_t.self, capacity: Int(size)) {
-            thread_info(port, thread_flavor_t(THREAD_EXTENDED_INFO), $0, &size)
-        }
-    }
-    guard ok == KERN_SUCCESS else { return "" }
-    return withUnsafeBytes(of: &info.pth_name) {
-        String(cString: $0.baseAddress!.assumingMemoryBound(to: CChar.self))
-    }
-}
-
-/// The kernel's unique id for a thread. Unlike the mach port name it is never
-/// recycled, so a rebuilt tap thread is always distinguishable from a kept one.
-private func threadID(_ port: thread_act_t) -> UInt64? {
-    var info = thread_identifier_info_data_t()
-    var size = mach_msg_type_number_t(MemoryLayout<thread_identifier_info_data_t>.size
-                                      / MemoryLayout<natural_t>.size)
-    let ok = withUnsafeMutablePointer(to: &info) {
-        $0.withMemoryRebound(to: integer_t.self, capacity: Int(size)) {
-            thread_info(port, thread_flavor_t(THREAD_IDENTIFIER_INFO), $0, &size)
-        }
-    }
-    return ok == KERN_SUCCESS ? info.thread_id : nil
 }
 
 // MARK: - event shapes

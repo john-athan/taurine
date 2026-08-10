@@ -3,9 +3,10 @@ import ApplicationServices
 
 /// The doorman. 🚪
 ///
-/// Reading scroll events needs nothing. *Changing* them needs Accessibility,
-/// which is the first permission Taurine has ever asked for, so it is worth
-/// being precise about what "granted" means.
+/// Watching events needs nothing. *Changing* them, and asking another
+/// application what it has focused, both need Accessibility, so this is the one
+/// permission Taurine ever asks for and the one gate every entry on the "things
+/// Apple got wrong" shelf goes through.
 ///
 /// The grant is not attached to an app, it is attached to a code identity. A
 /// signed app keeps its identity across updates because the signature says so.
@@ -20,10 +21,11 @@ import ApplicationServices
 /// stale-grant case it may not appear at all. So asking always offers the
 /// settings pane as well, and the wording sends people to the minus button
 /// rather than to a switch that is already on.
-enum ScrollPermission {
+enum AccessibilityPermission {
 
-    /// Whether this process may modify events right now. Cheap, no prompt, and
-    /// live: a grant made while Taurine is running flips this without a restart.
+    /// Whether this process may modify events and read another app's focus right
+    /// now. Cheap, no prompt, and live: a grant made while Taurine is running
+    /// flips this without a restart.
     static var isGranted: Bool { AXIsProcessTrusted() }
 
     /// Ask. Shows the system prompt if the system is willing to show it, and
@@ -43,12 +45,18 @@ enum ScrollPermission {
         NSWorkspace.shared.open(url)
     }
 
-    /// What to tell somebody whose scroll fix is switched on but not working.
-    /// Names both halves of the confusion: never granted, and granted to a
-    /// build that no longer exists.
-    static let missingGrantExplanation =
-        "macOS has not given Taurine permission to change scroll events.\n\n"
+    /// What to tell somebody whose fix is switched on but not working. Names
+    /// both halves of the confusion: never granted, and granted to a build that
+    /// no longer exists.
+    ///
+    /// `todo` completes the sentence "macOS has not given Taurine permission
+    /// to …", so each feature says what it is being stopped from doing rather
+    /// than making the reader map a generic sentence onto the switch they just
+    /// flipped.
+    static func missingGrantExplanation(toDo todo: String) -> String {
+        "macOS has not given Taurine permission to \(todo).\n\n"
         + "Open System Settings ▸ Privacy & Security ▸ Accessibility and switch Taurine on. "
         + "If Taurine is already switched on there, it has been rebuilt since you granted it: "
         + "select it, remove it with the − button, then add it again."
+    }
 }

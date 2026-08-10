@@ -38,7 +38,7 @@ final class ScrollDirectionFixer {
         case correcting(ScrollDevice)
 
         /// On, but macOS has not granted Accessibility. See
-        /// `ScrollPermission.missingGrantExplanation`.
+        /// `AccessibilityPermission.missingGrantExplanation(toDo:)`.
         case needsPermission
 
         /// On, permission granted, and the tap still could not be armed.
@@ -110,7 +110,7 @@ final class ScrollDirectionFixer {
     func start() -> Status {
         observe()
         guard tap == nil else { return status }
-        guard ScrollPermission.isGranted else { return settle(.needsPermission) }
+        guard AccessibilityPermission.isGranted else { return settle(.needsPermission) }
 
         let natural = SystemScrollDirection.isNatural
         switch ScrollTap.arm(systemScrollsNaturally: natural) {
@@ -161,7 +161,7 @@ final class ScrollDirectionFixer {
             start()             // permission may have arrived since we last tried
             return
         }
-        guard ScrollPermission.isGranted else {
+        guard AccessibilityPermission.isGranted else {
             // The grant can be taken away mid-session, which kills the tap
             // without telling us. Fall back to the honest state, but keep
             // watching, because it can just as easily come back.
@@ -175,7 +175,7 @@ final class ScrollDirectionFixer {
     /// Ask macOS for Accessibility, then look again. Wired to the menu item that
     /// only appears when the permission is what is missing.
     func requestPermission() {
-        ScrollPermission.request()
+        AccessibilityPermission.request()
         refresh()
     }
 
@@ -262,7 +262,7 @@ final class ScrollDirectionFixer {
     var explanation: String? {
         switch status {
         case .off, .correcting:  return nil
-        case .needsPermission:   return ScrollPermission.missingGrantExplanation
+        case .needsPermission:   return AccessibilityPermission.missingGrantExplanation(toDo: "change scroll events")
         case .blocked(let why):  return why
         }
     }
