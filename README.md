@@ -278,19 +278,25 @@ flapping at the boundary.
 > ever does get stuck, `taurine batt unlock` clears it unconditionally. Run
 > `make uninstall` and the daemon is released before its binary is removed.
 
-**CLI**
+---
+
+## CLI 💻
 
 ```bash
-taurine -- make build     # awake for exactly this command's lifetime
-taurine why               # who is keeping this Mac awake right now?
-taurine on | off | toggle # drive the running menu bar app
-taurine batt 80           # stop charging at 80%
+taurine                    # launch the menu bar app
+taurine -- make build      # awake for exactly this command's lifetime
+taurine why                # who is keeping this Mac awake right now?
+taurine on | off | toggle  # drive the running menu bar app
+taurine batt               # show the charge limit
+taurine batt 80            # stop charging at 80%
+taurine batt off           # charge to 100% again
+taurine batt unlock        # force-permit charging (if the daemon ever dies)
 taurine help
 ```
 
 `taurine -- <command>` is `caffeinate <command>` with a pulse: it prints a bull,
 holds display **and** system assertions for the child's life, and lets go the
-moment it exits — great in front of a long build or upload.
+moment it exits, which is what you want in front of a long build or upload.
 
 ---
 
@@ -298,9 +304,28 @@ moment it exits — great in front of a long build or upload.
 
 Decisions worth writing down live in [docs/adr](docs/adr/README.md): why there
 is no package manager, why the activity panel costs nothing while it is closed,
-why power comes from IOReport rather than `powermetrics`, why scroll direction
-belongs to the device, and why one of the keyboard fixes deliberately uses a
-system preference instead of a keyboard tap.
+why power comes from IOReport rather than `powermetrics`, which kernel counters
+are read wide enough not to wrap, why scroll direction belongs to the device,
+how ⌘X, ⌫ and ↩ are rewritten in Finder without Taurine touching a single file,
+and why the plain-text paste fix deliberately uses a system preference instead
+of a keyboard tap.
+
+### Nothing here is borrowed, and that is checked rather than assumed
+
+[THIRD_PARTY.md](THIRD_PARTY.md) records everything in the repository that came
+from somewhere else, and `scripts/provenance-check.py` asks GitHub code search
+whether the distinctive identifiers added since the last tag also co-occur in
+somebody else's repository. A hit under a copyleft license fails the build;
+anything else is reported for a human to read, because two projects solving the
+same small problem converge more often than either copies. The
+[Provenance workflow](.github/workflows/provenance.yml) runs it on every `v*`
+tag, once a month, and on demand. The useful moment is local, before tagging,
+while the answer can still change the release:
+
+```bash
+./scripts/provenance-check.py            # changes since the last tag
+./scripts/provenance-check.py --all      # every tracked source file
+```
 
 ---
 
