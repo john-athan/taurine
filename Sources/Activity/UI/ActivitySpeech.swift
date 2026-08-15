@@ -26,12 +26,31 @@ enum ActivitySpeech {
         ActivityFormat.watts(value, unit: value == 1 ? "watt" : "watts")
     }
 
+    /// An adapter's rating, in whole watts, like the number printed on it.
+    static func rated(_ value: Double) -> String {
+        ActivityFormat.wattsRating(value, unit: value == 1 ? "watt" : "watts")
+    }
+
     static func megahertz(_ value: Double) -> String {
         ActivityFormat.megahertz(value, units: ("megahertz", "gigahertz"))
     }
 
     static func percent(_ fraction: Double) -> String {
         ActivityFormat.percent(fraction, unit: "percent")
+    }
+
+    /// "2 hours 47 minutes". Built from the same split the drawn "2 h 47 m"
+    /// uses, so the two can never disagree about which minute it is.
+    static func duration(_ seconds: TimeInterval) -> String {
+        guard let split = ActivityFormat.hoursMinutes(seconds) else { return ActivityFormat.unknown }
+        var parts: [String] = []
+        if split.hours > 0 {
+            parts.append("\(split.hours) \(split.hours == 1 ? "hour" : "hours")")
+        }
+        if split.minutes > 0 {
+            parts.append("\(split.minutes) \(split.minutes == 1 ? "minute" : "minutes")")
+        }
+        return parts.joined(separator: " ")
     }
 
     static func bytes(_ value: UInt64) -> String {
@@ -93,6 +112,43 @@ enum ActivitySpeech {
         if let w = power.gpuWatts { parts.append("graphics \(watts(w))") }
         if let w = power.aneWatts { parts.append("neural engine \(watts(w))") }
         return parts.joined(separator: ", ") + "."
+    }
+
+    /// The battery, read as one sentence: how full, which way the energy is
+    /// going, how fast, and how long that leaves. The state comes first after
+    /// the percentage because it is the thing that changes what the rest of the
+    /// sentence means.
+    static func battery(_ battery: BatteryActivity) -> String {
+        var parts: [String] = ["\(percent(battery.charge)) charged"]
+        let flow = battery.batteryWatts.map { watts(abs($0)) }
+
+        switch battery.state {
+        case .charging:
+            parts.append(flow.map { "charging at \($0)" } ?? "charging")
+            if let full = battery.timeToFull { parts.append("full in \(duration(full))") }
+        case .discharging:
+            parts.append(flow.map { "on battery, drawing \($0)" } ?? "on battery")
+            if let empty = battery.timeToEmpty { parts.append("\(duration(empty)) left") }
+        case .charged:
+            parts.append("charged, running on the adapter")
+        case .held:
+            parts.append("plugged in, not charging")
+        }
+
+        if let adapter = adapter(battery) { parts.append(adapter) }
+        return parts.joined(separator: ", ") + "."
+    }
+
+    /// The adapter clause, and nil on battery power, where there is no adapter
+    /// to describe.
+    private static func adapter(_ battery: BatteryActivity) -> String? {
+        guard battery.isPluggedIn else { return nil }
+        switch (battery.inputWatts, battery.adapterWatts) {
+        case let (input?, rating?): return "adapter delivering \(watts(input)) of \(rated(rating))"
+        case let (input?, nil):     return "adapter delivering \(watts(input))"
+        case let (nil, rating?):    return "\(rated(rating)) adapter"
+        case (nil, nil):            return nil
+        }
     }
 
     static func memory(_ memory: MemoryActivity) -> String {

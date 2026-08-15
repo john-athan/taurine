@@ -107,7 +107,7 @@ The menu gives you:
 | **Keep awake for…** | 15 min / 30 min / 1 h / 2 h, then auto-off. |
 | **Stay awake until an app quits…** | Pick a running app; Taurine releases the instant it exits. |
 | **Why is my Mac awake?** | Live list of every process holding a sleep assertion. |
-| **What is this Mac doing?** | The activity panel: cores, GPU, watts, memory, disk, network. Costs nothing until you open it. |
+| **What is this Mac doing?** | The activity panel: cores, GPU, watts, battery, memory, disk, network. Costs nothing until you open it. |
 | *(the badge)* | `45.2 MB · 0 timers · 0 sockets`, read live from the kernel every time the menu opens. Not a claim, a measurement. |
 | **Charge limit** | Stop charging at 60–90% to spare the cell. One admin prompt to install, then free forever. |
 | **Things Apple got wrong** | Small fixes the system should have shipped. Currently: scroll direction per device; ⌘X / ⌘V to cut and paste files in Finder; ⌫ to move files to the Trash; ↩ to open them; and ⇧⌘V to paste as plain text in every application. |
@@ -132,6 +132,16 @@ menu bar: per-cluster and per-core load with the frequency each cluster is
 actually running at, GPU utilisation, CPU, GPU and Neural Engine watts, memory
 split into app, wired and compressed with swap when swap is in use, and disk and
 network rates with a minute of history.
+
+**And the plug, which is the other half of the question on a laptop.** The
+battery tile says how full the cell is, which way the energy is moving and how
+fast, how long the gauge thinks that leaves, and what the adapter is delivering
+against what it is rated for: `adapter 27.9 W of 30 W` next to `CHARGING 21.4 W`
+is a Mac charging as fast as that adapter allows. Read from the battery gauge in
+the IO registry, never from an undocumented SMC key, and the wall figure is shown
+only when the machine's own telemetry corroborates it. A Mac with no battery
+simply has no battery tile. See
+[ADR 9](docs/adr/0009-the-battery-is-read-from-the-gauge.md).
 
 **No password.** Every other Mac power monitor shells out to `powermetrics`,
 which will not run without root. Taurine reads the same energy counters directly
@@ -304,8 +314,10 @@ moment it exits, which is what you want in front of a long build or upload.
 
 Decisions worth writing down live in [docs/adr](docs/adr/README.md): why there
 is no package manager, why the activity panel costs nothing while it is closed,
-why power comes from IOReport rather than `powermetrics`, which kernel counters
-are read wide enough not to wrap, why scroll direction belongs to the device,
+why power comes from IOReport rather than `powermetrics`, why the battery is
+read from its gauge and the wall figure has to corroborate itself, which kernel
+counters are read wide enough not to wrap, why scroll direction belongs to the
+device,
 how ⌘X, ⌫ and ↩ are rewritten in Finder without Taurine touching a single file,
 and why the plain-text paste fix deliberately uses a system preference instead
 of a keyboard tap.

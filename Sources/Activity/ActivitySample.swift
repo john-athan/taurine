@@ -30,6 +30,7 @@ struct ActivitySample {
     var disk: TrafficRate?
     var network: TrafficRate?
     var power: PowerActivity?
+    var battery: BatteryActivity?
     var thermal: ThermalActivity?
 
     /// Probes that declined to open for this session, so the panel can name
@@ -146,6 +147,64 @@ struct PowerActivity {
         if let packageWatts { return packageWatts }
         let parts = [cpuWatts, gpuWatts, aneWatts].compactMap { $0 }
         return parts.isEmpty ? nil : parts.reduce(0, +)
+    }
+}
+
+/// What the battery is doing, and which way the energy is flowing.
+///
+/// The power tile above this one measures the chip. This one measures the
+/// plug: they are different questions, and on a charging laptop they are
+/// different numbers by a factor of two, because charging a cell costs more
+/// than running the machine that holds it.
+struct BatteryActivity {
+
+    /// State of charge, in `0...1`.
+    var charge: Double
+
+    /// Whether an adapter is attached. True does not imply charging: a Mac at
+    /// its charge limit, or one macOS has decided to hold at 80%, is plugged
+    /// in and taking nothing.
+    var isPluggedIn: Bool
+    var isCharging: Bool
+    var isFullyCharged: Bool
+
+    /// Signed, and the sign is the whole point: positive is energy going into
+    /// the cell, negative is energy coming out of it. Nil when the gauge does
+    /// not publish both halves of the product.
+    var batteryWatts: Double?
+
+    /// What the attached adapter says it can deliver.
+    var adapterWatts: Double?
+
+    /// What is actually coming in through that adapter, when the machine's own
+    /// telemetry is self-consistent enough to be believed. See
+    /// `BatteryProbe.inputWatts(from:batteryWatts:)` for what "believed" means.
+    var inputWatts: Double?
+
+    /// The gauge's own estimate, in seconds. At most one of the two is ever
+    /// set, because the other one is not a question the gauge is answering.
+    var timeToFull: TimeInterval?
+    var timeToEmpty: TimeInterval?
+
+    /// The four states worth naming, in the order they have to be tested.
+    ///
+    /// Charging is asked first because a battery can be charging at 100%, and
+    /// the plug is asked before fullness because a laptop sitting at 100% with
+    /// nothing attached is discharging however full it is.
+    enum State: Equatable {
+        case charging
+        case discharging
+        /// Plugged in, full, taking nothing.
+        case charged
+        /// Plugged in, not full, and still taking nothing. What a charge limit
+        /// looks like from here, Taurine's own included.
+        case held
+    }
+
+    var state: State {
+        if isCharging { return .charging }
+        if !isPluggedIn { return .discharging }
+        return isFullyCharged ? .charged : .held
     }
 }
 

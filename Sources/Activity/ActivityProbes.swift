@@ -28,6 +28,7 @@ enum ActivityProbes {
             ProcessorProbe(),
             GraphicsProbe(),
             EnergyProbe(),
+            BatteryProbe(),
             MemoryProbe(),
             StorageProbe(),
             NetworkProbe(),

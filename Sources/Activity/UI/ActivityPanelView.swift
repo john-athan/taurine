@@ -2,15 +2,18 @@ import Cocoa
 
 /// The panel. 📊
 ///
-/// The whole readout: a nameplate, five tiles and a footer, stacked down one
+/// The whole readout: a nameplate, six tiles and a footer, stacked down one
 /// sixteen-point margin. It owns the tiles, hands each of them every sample and
 /// lets each decide whether it has anything to say, then stacks whatever is
 /// left. A Mac with no energy counters simply has no power tile and a shorter
 /// panel, with no gap where one would have been.
 ///
 /// The order is deliberate and is a small argument: load first (processor,
-/// graphics), then what that load costs (power), then what it is using
-/// (memory), then what it is moving (disk, network). Power sits in the middle
+/// graphics), then what that load costs (power, and the battery paying for it),
+/// then what it is using (memory), then what it is moving (disk, network). The
+/// battery follows the watts rather than opening the panel because it is the
+/// same subject read from the other end, and because a laptop's charge is a
+/// number macOS already puts in the menu bar. Power sits in the middle
 /// rather than at the top because it reads as the consequence of the two tiles
 /// above it, and because thirty points of red a third of the way down a calm
 /// grey panel is unmissable wherever it is.
@@ -34,6 +37,7 @@ final class ActivityPanelView: NSView {
     private let cpu = ActivityCPUView()
     private let gpu = ActivityGPUView()
     private let power = ActivityPowerView()
+    private let battery = ActivityBatteryView()
     private let memory = ActivityMemoryView()
     private let disk = ActivityTrafficView.disk()
     private let network = ActivityTrafficView.network()
@@ -51,7 +55,7 @@ final class ActivityPanelView: NSView {
     private static let footerGap: CGFloat = 5
 
     private var sections: [ActivitySectionView] {
-        [header, cpu, gpu, power, memory, disk, network]
+        [header, cpu, gpu, power, battery, memory, disk, network]
     }
 
     override var isFlipped: Bool { true }

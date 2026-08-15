@@ -65,6 +65,16 @@ enum ActivityFormat {
         return "\(number) \(unit)"
     }
 
+    /// A wattage that was printed on a label rather than measured: an
+    /// adapter's rating. Whole watts, because that is what the rating is. A
+    /// 30 W adapter shown as "30.0 W" reads as a measurement that happened to
+    /// land on a round number, and invites the reader to watch a decimal place
+    /// that will never move.
+    static func wattsRating(_ value: Double, unit: String = "W") -> String {
+        guard value.isFinite, value >= 0 else { return unknown }
+        return "\(String(format: "%.0f", value)) \(unit)"
+    }
+
     /// The digits of a wattage with no unit attached, or nil when the value is
     /// not a reading. The power headline draws the number and its unit in two
     /// different fonts, and asking for the number on its own is how it gets
@@ -86,6 +96,28 @@ enum ActivityFormat {
         let power = pow(10.0, Double(digits))
         if digits > 0, (value * power).rounded() / power >= 100 { digits = 0 }
         return String(format: "%.\(digits)f", value)
+    }
+
+    /// A span of time split into whole hours and whole minutes, or nil when
+    /// there is no span to state.
+    ///
+    /// Seconds are deliberately dropped rather than rounded into the display.
+    /// The only durations this panel shows are a battery gauge's estimate of
+    /// when the cell fills or empties, and that estimate moves by minutes the
+    /// moment anybody opens an application. A readout precise to the second
+    /// would be making a claim about its own accuracy that the number behind it
+    /// cannot support.
+    static func hoursMinutes(_ seconds: TimeInterval) -> (hours: Int, minutes: Int)? {
+        guard seconds.isFinite, seconds >= 0 else { return nil }
+        let total = Int((seconds / 60).rounded())
+        guard total > 0 else { return nil }
+        return (total / 60, total % 60)
+    }
+
+    /// A span of time, as "2 h 47 m" or "47 m".
+    static func duration(_ seconds: TimeInterval) -> String {
+        guard let split = hoursMinutes(seconds) else { return unknown }
+        return split.hours > 0 ? "\(split.hours) h \(split.minutes) m" : "\(split.minutes) m"
     }
 
     /// A clock, given in megahertz, shown in whichever unit reads shorter.
