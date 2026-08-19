@@ -90,6 +90,43 @@ func runCLI(_ args: [String]) -> Int32? {
         print("🐂 taurine \(first) → sent. (Taurine.app must be running.)")
         return 0
 
+    case "lock":
+        // Standalone: locks the screen without asking anything to sleep, so
+        // whatever this terminal started is still running a second later.
+        if let err = ScreenLock.now() {
+            FileHandle.standardError.write(Data("taurine: \(err)\n".utf8))
+            return 1
+        }
+        return 0
+
+    case "lockable":
+        // The stored answer, readable and writable from a script.
+        let arg = args.dropFirst().first?.lowercased()
+        switch arg {
+        case "on", "yes", "1":   AwakeShape.letsScreenLock = true
+        case "off", "no", "0":   AwakeShape.letsScreenLock = false
+        case nil:                break
+        default:
+            FileHandle.standardError.write(Data("taurine: lockable takes 'on' or 'off'.\n".utf8))
+            return 2
+        }
+        if arg != nil {
+            // A session already being held was created with the old shape, so
+            // tell the app to re-hold rather than leaving the two disagreeing.
+            DistributedNotificationCenter.default()
+                .postNotificationName(.init("io.github.john-athan.taurine.lockable"), object: nil,
+                                      userInfo: nil, deliverImmediately: true)
+        }
+        let policy = LockPolicy.current()
+        if AwakeShape.letsScreenLock {
+            print("🔒 Awake sessions let the screen lock; the Mac keeps working.")
+            print("   \(policy.summary)")
+            if let w = policy.warning { print("   ⚠️  \(w)") }
+        } else {
+            print("🔒 Awake sessions keep the screen lit (`taurine lockable on` to change that).")
+        }
+        return 0
+
     case "why", "status":
         // Standalone: who's keeping this Mac awake right now?
         let holders = AssertionInspector.current()
@@ -109,6 +146,9 @@ func runCLI(_ args: [String]) -> Int32? {
           taurine on|off|toggle   drive the running app
           taurine -- <command>    stay awake for a command's lifetime
           taurine why             show who's keeping the Mac awake
+          taurine lock            lock the screen now, without sleeping
+          taurine lockable [on|off]
+                                  let the screen lock while awake (Mac keeps working)
           taurine batt            show the charge limit
           taurine batt 80         stop charging at 80%
           taurine batt off        charge to 100% again

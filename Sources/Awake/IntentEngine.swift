@@ -87,9 +87,15 @@ enum CommandMode {
             return 2
         }
         let pretty = argv.joined(separator: " ")
+        // Same shape the menu bar app would hold, read from the same stored
+        // answer: if the owner said the screen may lock, a command run from a
+        // terminal has no business lighting it back up for an hour.
         let assertion = PowerAssertion()
-        assertion.hold([.display, .system], reason: "command: \(pretty)")
+        let mayLock = AwakeShape.letsScreenLock
+        assertion.hold(AwakeShape.guards(letScreenLock: mayLock, alsoSystemSleep: true),
+                       reason: "command: \(pretty)")
 
+        if mayLock { print("🔒 the screen may darken and lock; the command keeps running.") }
         print(Bull.charging)
         print("🐂 taurine — holding the line while `\(pretty)` runs…\n")
 

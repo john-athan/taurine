@@ -5,7 +5,7 @@ import Cocoa
 /// Owns the menu bar item and wires every part together: the assertion, the
 /// intent engine, the bull, the inspector, the battery conscience, the hotkey.
 /// Keep this file readable — it's the map of the whole app.
-final class MenuBarApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
+final class MenuBarApp: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItemValidation {
 
     // The parts.
     private var statusItem: NSStatusItem!
@@ -54,12 +54,21 @@ final class MenuBarApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         get { defaults.bool(forKey: "lidAwake") }
         set { defaults.set(newValue, forKey: "lidAwake") }
     }
+    /// Off by default: awake means a lit screen, the way it always has. On, and
+    /// Taurine stops holding the display up, so macOS may darken and lock it on
+    /// its normal schedule while the Mac itself keeps working. Stored where the
+    /// CLI can read it too, so `taurine -- <command>` makes the same choice.
+    private var letScreenLock: Bool {
+        get { AwakeShape.letsScreenLock }
+        set { AwakeShape.letsScreenLock = newValue }
+    }
 
     // Menu items we mutate.
     private let statusHeader = NSMenuItem(title: "Taurine — idle", action: nil, keyEquivalent: "")
     private var whyItem: NSMenuItem!
     private var loginItem: NSMenuItem!
     private var systemItem: NSMenuItem!
+    private var lockModeItem: NSMenuItem!
     private var batteryItem: NSMenuItem!
     private var startAwakeItem: NSMenuItem!
     private var lidItem: NSMenuItem!
@@ -121,8 +130,8 @@ final class MenuBarApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// Start holding the line for a given reason.
     func activate(_ intent: Intent) {
         self.intent = intent
-        var guards: SleepGuard = [.display]
-        if alsoSystemSleep { guards.insert(.system) }
+        let guards = AwakeShape.guards(letScreenLock: letScreenLock,
+                                       alsoSystemSleep: alsoSystemSleep)
         assertion.hold(guards, reason: intent.label)
 
         // Arm any self-ending behavior.
@@ -186,9 +195,11 @@ final class MenuBarApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         default:                     symbol = "bolt.fill"
         }
         b.image = Self.icon(symbol) ?? Self.icon("bolt.fill")
-        let lid = clamshell.active ? " · lid held" : ""
-        b.toolTip = isAwake ? "Taurine — awake \(intent?.label ?? "")\(lid)" : "Taurine — idle (Mac may sleep)"
-        statusHeader.title = isAwake ? "🐂 awake — \(intent?.label ?? "")\(lid)" : "🐂 idle — Mac may sleep"
+        // Everything the badge appends after the reason, in reading order.
+        let flags = (clamshell.active ? " · lid held" : "")
+                  + (letScreenLock ? " · screen may lock" : "")
+        b.toolTip = isAwake ? "Taurine — awake \(intent?.label ?? "")\(flags)" : "Taurine — idle (Mac may sleep)"
+        statusHeader.title = isAwake ? "🐂 awake — \(intent?.label ?? "")\(flags)" : "🐂 idle — Mac may sleep"
     }
 
     /// SF Symbol as a template image, tolerant of symbols missing on old macOS.
@@ -209,6 +220,13 @@ final class MenuBarApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(.separator())
 
         add(menu, "Toggle  (⌃⌥⌘R)", #selector(toggleAction))
+
+        // The one gesture that is guaranteed not to end anything: it locks the
+        // screen without asking the Mac to sleep, so whatever was running is
+        // still running behind the login window.
+        let lockNow = add(menu, "Lock the screen now  (⌃⌘Q)", #selector(lockScreenNow))
+        lockNow.toolTip = "Locks straight away and keeps every process alive. "
+                        + "⌃⌘Q is macOS's own shortcut for the same thing."
 
         // Keep awake for a while.
         let forMenu = NSMenu()
@@ -272,6 +290,7 @@ final class MenuBarApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         menu.addItem(.separator())
 
+        lockModeItem = add(menu, "Let the screen lock (Mac keeps working)", #selector(toggleLockMode))
         systemItem   = add(menu, "Also prevent system sleep", #selector(toggleSystem))
         lidItem      = add(menu, "Keep awake with lid closed (AC only)", #selector(toggleLid))
         lidItem.toolTip = "Needs admin. Blocks lid-close sleep while awake and plugged in. "
@@ -296,7 +315,7 @@ final class MenuBarApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// Refresh live/checkbox state whenever a menu opens (never while idle).
     func menuWillOpen(_ menu: NSMenu) {
         if menu == statusItem.menu {
-            systemItem.state = alsoSystemSleep ? .on : .off
+            refreshLockMode()
             lidItem.state = lidAwake ? .on : .off
             batteryItem.state = batteryGuard ? .on : .off
             startAwakeItem.state = startAwake ? .on : .off
@@ -325,6 +344,42 @@ final class MenuBarApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if menu == chargeItem.submenu { populateCharge(menu); return }
         // Otherwise it's the "until an app quits" submenu.
         populateRunningApps(menu)
+    }
+
+    /// A menu whose items point at this object has AppKit re-enable them for us
+    /// on every open, so an item that must be grey has to say so here. Exactly
+    /// one does: system sleep prevention, while the screen is allowed to lock.
+    func validateMenuItem(_ item: NSMenuItem) -> Bool {
+        item == systemItem ? !letScreenLock : true
+    }
+
+    /// The two checkboxes that decide the shape of an awake session, plus the
+    /// only honest thing to say about when the Mac will actually lock.
+    ///
+    /// The live settings are read from `pmset` only while this mode is on, and
+    /// only when the menu opens. An owner who never asks for a lockable session
+    /// never pays for a process spawn, and a closed menu never pays at all.
+    private func refreshLockMode() {
+        lockModeItem.state = letScreenLock ? .on : .off
+
+        // With the display guard dropped, the system guard is the only thing
+        // left holding the Mac up, so it is not a choice any more. Say that by
+        // showing it on and disabled rather than by silently ignoring a click.
+        systemItem.state = (letScreenLock || alsoSystemSleep) ? .on : .off
+        systemItem.toolTip = letScreenLock
+            ? "Held on while the screen may lock: it is now the only thing keeping this Mac awake."
+            : nil
+
+        guard letScreenLock else {
+            lockModeItem.toolTip =
+                "Taurine stops holding the display awake, so your screen darkens and locks on its "
+              + "usual schedule while the Mac stays fully awake. This is `caffeinate -i`: builds, "
+              + "agents and downloads keep running behind the login window."
+            return
+        }
+
+        let policy = LockPolicy.current()
+        lockModeItem.toolTip = policy.summary + (policy.warning.map { "\n\n" + $0 } ?? "")
     }
 
     /// Built fresh on open, from the state file the daemon last wrote. Nothing
@@ -490,6 +545,27 @@ final class MenuBarApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         finder.refresh()
     }
 
+    /// Lock now, and say so only when it fails: a lock that worked is already
+    /// on screen, and a toast behind the login window would be shouting at a
+    /// closed door.
+    @objc private func lockScreenNow() {
+        guard let err = ScreenLock.now() else { return }
+        let a = NSAlert()
+        a.messageText = "Couldn't lock the screen"
+        a.informativeText = err + "\n\nmacOS's own Lock Screen (⌃⌘Q) does the same job."
+        a.runModal()
+    }
+
+    @objc private func toggleLockMode() {
+        letScreenLock.toggle()
+        if isAwake, let i = intent { activate(i) }   // re-apply with new guards
+        render()
+        Toast.shared.play(letScreenLock ? Bull.stop : Bull.run, near: statusItem.button,
+                          tint: NSColor(calibratedRed: 0.36, green: 0.72, blue: 0.42, alpha: 1),
+                          caption: letScreenLock ? "screen may lock, Mac stays awake"
+                                                 : "screen stays lit while awake")
+    }
+
     @objc private func toggleSystem() {
         alsoSystemSleep.toggle()
         if isAwake, let i = intent { activate(i) }   // re-apply with new guards
@@ -575,5 +651,12 @@ final class MenuBarApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
             self?.deactivate(reason: "off (cli)") }
         dc.addObserver(forName: .init("io.github.john-athan.taurine.toggle"), object: nil, queue: .main) { [weak self] _ in
             self?.toggle() }
+        // `taurine lockable on|off` writes the preference and then says so, so
+        // a session that is already held is re-held in the new shape instead of
+        // outliving the answer it was built from.
+        dc.addObserver(forName: .init("io.github.john-athan.taurine.lockable"), object: nil, queue: .main) { [weak self] _ in
+            guard let self else { return }
+            if self.isAwake, let i = self.intent { self.activate(i) } else { self.render() }
+        }
     }
 }

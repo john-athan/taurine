@@ -24,6 +24,12 @@ answers:
 taurine why
 ```
 
+Walk away and the screen can still lock, without any of it stopping:
+
+```bash
+taurine lockable on        # awake holds the Mac up, not the screen
+```
+
 And while it's holding the line, a bull gallops out of your menu bar to say so.
 
 Ask what your Mac is *spending itself on* and it answers in watts, from the
@@ -111,6 +117,8 @@ The menu gives you:
 | *(the badge)* | `45.2 MB · 0 timers · 0 sockets`, read live from the kernel every time the menu opens. Not a claim, a measurement. |
 | **Charge limit** | Stop charging at 60–90% to spare the cell. One admin prompt to install, then free forever. |
 | **Things Apple got wrong** | Small fixes the system should have shipped. Currently: scroll direction per device; ⌘X / ⌘V to cut and paste files in Finder; ⌫ to move files to the Trash; ↩ to open them; and ⇧⌘V to paste as plain text in every application. |
+| **Lock the screen now  (⌃⌘Q)** | Locks straight away without asking the Mac to sleep. Everything you started keeps running behind the login window. |
+| **Let the screen lock (Mac keeps working)** | Off by default. On, and Taurine stops holding the *display* up, so your screen darkens and locks on its usual schedule while the machine stays fully awake. This is `caffeinate -i`. |
 | **Also prevent system sleep** | Not just the display — the whole machine (for long jobs). |
 | **Keep awake with lid closed (AC only)** | Off by default — a closed lid sleeps normally. On, and only while awake + plugged in, Taurine holds the lid open too (`pmset disablesleep`, needs admin). Reverts on unplug, toggle-off, or quit. |
 | **Auto-off under 20% on battery** | The conscience. Won't drain your laptop overnight. |
@@ -122,6 +130,17 @@ The menu gives you:
 > Taurine engages it only while awake + on AC and always puts it back. A hard
 > crash can leave it set; if a closed lid ever won't sleep, run
 > `sudo pmset -a disablesleep 0`. And don't stuff an awake, lid-shut Mac in a bag.
+
+> **Awake and locked, honestly.** *Let the screen lock* drops one assertion, and
+> that is the whole trick: the lock was never blocked, it was never reached,
+> because a display that is held awake never goes dark and never starts a screen
+> saver. What the mode cannot do is refuse a sleep you asked for. The Apple menu,
+> a closed lid, and on many Macs the power button all take a path no assertion
+> sees, and a Mac that sleeps takes your build with it. Lock with **⌃⌘Q** or with
+> Taurine's own item and nothing stops. The menu tooltip reads your real display
+> timeout and power button setting out of `pmset` and says which of them will
+> bite. One more thing to know: with the screen dark, screenshots and GUI
+> automation see nothing. Terminal work does not care.
 
 ---
 
@@ -296,6 +315,8 @@ flapping at the boundary.
 taurine                    # launch the menu bar app
 taurine -- make build      # awake for exactly this command's lifetime
 taurine why                # who is keeping this Mac awake right now?
+taurine lock               # lock the screen now, without sleeping
+taurine lockable on|off    # let the screen lock while awake (Mac keeps working)
 taurine on | off | toggle  # drive the running menu bar app
 taurine batt               # show the charge limit
 taurine batt 80            # stop charging at 80%
@@ -305,8 +326,10 @@ taurine help
 ```
 
 `taurine -- <command>` is `caffeinate <command>` with a pulse: it prints a bull,
-holds display **and** system assertions for the child's life, and lets go the
-moment it exits, which is what you want in front of a long build or upload.
+holds assertions for the child's life, and lets go the moment it exits, which is
+what you want in front of a long build or upload. It holds the same shape the
+menu bar app would: display and system normally, system alone once `taurine
+lockable on` has said the screen may go dark.
 
 ---
 
