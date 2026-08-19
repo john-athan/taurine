@@ -46,4 +46,27 @@ in every SMC tool since, several of them GPL. The offsets are the interface; the
 code that assembles them here was written by hand, byte by byte, precisely so it
 did not have to be taken from anywhere.
 
-No finding from `scripts/provenance-check.py` has needed an entry yet.
+### The `pmset -g` fixture, and the `caffeinate + prevented` finding (2026-08-19)
+
+`Tests/ScreenLockTests.swift` embeds a block of `pmset -g` output, captured on
+this Mac, so that `LockPolicy.parse` is tested against the real thing rather
+than against a tidied-up idea of it. One of those lines,
+
+    sleep                1 (sleep prevented by caffeinate, caffeinate, powerd)
+
+is printed by `pmset`, which ships with macOS. The provenance check probes the
+two rarest identifiers on a line, here `caffeinate` and `prevented`, and found
+that line in 28 other repositories, two of them AGPL-3.0:
+[Acerola-1/hagimi-monitor](https://github.com/Acerola-1/hagimi-monitor) and
+[voidengineer-911/whisky-claude](https://github.com/voidengineer-911/whisky-claude).
+
+The verdict is convergence, not copying. Every project that reads power
+assertions pastes the same tool output into the same kind of fixture, because
+there is only one thing `pmset` prints. No code from either repository was read
+into this one, and neither was consulted while writing `Sources/Awake/ScreenLock.swift`.
+Copyright does not attach here to Taurine's use of a system tool's output, and
+in any case the text originates with Apple's `pmset`, not with the repositories
+the search returned.
+
+The wider list of matches on that same probe is the same finding: a couple of
+dozen menu bar caffeine apps whose tests quote `pmset`.
