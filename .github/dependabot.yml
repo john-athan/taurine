@@ -1,0 +1,14 @@
+version: 2
+
+# github-actions is the only ecosystem here: taurine depends on nothing but the
+# Xcode command line tools, which Dependabot cannot see and does not need to.
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 1
+    groups:
+      github-actions:
+        patterns: ["*"]
+        update-types: ["major", "minor", "patch"]

@@ -1,0 +1,33 @@
+name: CI
+
+# taurine had no CI at all. Its only workflow was the provenance gate, which ran
+# on tags and a monthly cron and never once compiled anything, so eight releases
+# went out on the strength of a local build and nothing else.
+#
+# A caller, never a container: this is `make build` and `make test`, the same two
+# targets `oss check taurine` runs here. macos, because it is a Swift app with a
+# LaunchDaemon and there is no other runner that can build it.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Swift version
+        run: swift --version
+      - name: Build
+        run: make build
+      - name: Test
+        run: make test
