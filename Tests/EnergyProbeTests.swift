@@ -118,7 +118,7 @@ func runEnergyProbeTests() {
     let probe = EnergyProbe()
     var opened = false
 
-    Check.suite("energy: the private framework is still there") {
+    Check.hardwareSuite("energy: the private framework is still there") {
         do {
             try probe.open()
             opened = true

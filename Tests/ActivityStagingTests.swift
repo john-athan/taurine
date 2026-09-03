@@ -59,7 +59,15 @@ func runActivityStagingTests() {
             let producer = Producer(order), enricher = Enricher(order)
             let list: [ActivityProbe] = probes == 0 ? [enricher, producer] : [producer, enricher]
             guard let sample = Check.unwrap(session(list, order), "\(label): a sample arrived") else { continue }
-            Check.equal(order.ran, ["producer", "enricher"], "\(label): the producer still ran first")
+            // The first sample's two entries, not the whole list. The monitor
+            // ticks every 0.1s and the loop above notices in 0.02s slices, so a
+            // second sample can land before the wait returns and `order.ran`
+            // then holds four entries. What this suite is about is the order
+            // within a sample, which the first two answer; on a GitHub runner
+            // the exact-equality version failed every time, and on a busy Mac
+            // it would have failed eventually.
+            Check.equal(Array(order.ran.prefix(2)), ["producer", "enricher"],
+                        "\(label): the producer still ran first")
             Check.equal(sample.gpu?.frequencyMHz, 1234, "\(label): the enrichment landed")
         }
     }

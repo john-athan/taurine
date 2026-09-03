@@ -343,7 +343,7 @@ func runActivityProbeTests() {
 
     // MARK: - graphics and thermal
 
-    Check.suite("graphics probe: this Mac") {
+    Check.hardwareSuite("graphics probe: this Mac") {
         let probe = GraphicsProbe()
         do { try probe.open() } catch { Check.that(false, "opens: \(error)"); return }
         defer { probe.close() }
@@ -501,7 +501,7 @@ func runActivityProbeTests() {
 
     // MARK: - through the monitor
 
-    Check.suite("monitor: a full panel session start to finish") {
+    Check.hardwareSuite("monitor: a full panel session start to finish") {
         let monitor = ActivityMonitor(probes: [ProcessorProbe(), MemoryProbe(), StorageProbe(),
                                                NetworkProbe(), GraphicsProbe(), ThermalProbe()])
         var samples: [ActivitySample] = []

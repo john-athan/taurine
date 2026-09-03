@@ -182,7 +182,7 @@ func runVoltageStatesTests() {
         Check.isNil(states.frequenciesMHz(operatingStates: 19), "and no candidate at all gives silence too")
     }
 
-    Check.suite("voltage-states: the rule against every property this Mac publishes") {
+    Check.hardwareSuite("voltage-states: the rule against every property this Mac publishes") {
         // The fixtures above are bytes; this is the live registry. Whatever the
         // pmgr node holds on the Mac running the tests, every table that
         // survives has to be a table a clock could be described by, and none of

@@ -16,7 +16,33 @@ enum Check {
 
     private(set) static var checks = 0
     private(set) static var failures: [String] = []
+    private(set) static var skipped: [String] = []
     private static var suite = "(no suite)"
+
+    /// Whether this process is running inside a virtual machine.
+    ///
+    /// A few suites ask the machine about itself rather than about taurine:
+    /// does IOReport publish the channels the power tile needs, does the pmgr
+    /// node carry a voltage-states table, does the GPU answer at all. A VM has
+    /// none of that, and neither does an Intel Mac, which is why the
+    /// voltage-states suite already excuses itself on one. This is the same
+    /// judgement, one step further out.
+    ///
+    /// `kern.hv_vmm_present` is the kernel's own answer and is 1 under any
+    /// hypervisor. It is the only usable signal here: GitHub's runners are
+    /// macos-26-arm64, so `hw.optional.arm64` is 1 on them too.
+    static let isVirtual: Bool = (CPUTopology.sysctlInt("kern.hv_vmm_present") ?? 0) == 1
+
+    /// A suite that only real hardware can answer. On a virtual machine it is
+    /// recorded as skipped and never run, so a red run means taurine is wrong
+    /// rather than that the runner is not a Mac.
+    static func hardwareSuite(_ name: String, _ body: () -> Void) {
+        guard !isVirtual else {
+            skipped.append(name)
+            return
+        }
+        suite(name, body)
+    }
 
     /// Group a handful of related checks under a name, for readable output.
     static func suite(_ name: String, _ body: () -> Void) {
@@ -74,6 +100,12 @@ enum Check {
 
     /// Print the tally and hand back a process exit code.
     static func report() -> Int32 {
+        if !skipped.isEmpty {
+            print("⊘ \(skipped.count) suite(s) skipped: this is a virtual machine, "
+                  + "and they ask questions only hardware can answer")
+            for s in skipped { print("   • \(s)") }
+            print("")
+        }
         if failures.isEmpty {
             print("✅ \(checks) checks passed")
             return 0
