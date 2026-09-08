@@ -23,10 +23,11 @@ be redistributed as artwork. No symbol is exported into this repository.
 
 ## Reviewed and cleared
 
-Findings from `scripts/provenance-check.py`, and anything else the code learned
-from somewhere else, belong here with the date and the reasoning, so the next
-reader does not repeat the investigation. What follows is the author's own
-assessment and not legal advice.
+Findings from the provenance gate (run from oss-kit as part of `oss release`,
+see the README), and anything else the code learned from somewhere else,
+belong here with the date and the reasoning, so the next reader does not
+repeat the investigation. What follows is the author's own assessment and not
+legal advice.
 
 ### The SMC charge keys, and the `CH0C` finding (2026-08-14)
 

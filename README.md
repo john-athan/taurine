@@ -348,19 +348,14 @@ of a keyboard tap.
 ### Nothing here is borrowed, and that is checked rather than assumed
 
 [THIRD_PARTY.md](THIRD_PARTY.md) records everything in the repository that came
-from somewhere else, and `scripts/provenance-check.py` asks GitHub code search
+from somewhere else. The check behind those findings, asking GitHub code search
 whether the distinctive identifiers added since the last tag also co-occur in
-somebody else's repository. A hit under a copyleft license fails the build;
-anything else is reported for a human to read, because two projects solving the
-same small problem converge more often than either copies. The
-[Provenance workflow](.github/workflows/provenance.yml) runs it on every `v*`
-tag, once a month, and on demand. The useful moment is local, before tagging,
-while the answer can still change the release:
-
-```bash
-./scripts/provenance-check.py            # changes since the last tag
-./scripts/provenance-check.py --all      # every tracked source file
-```
+somebody else's repository, used to live in this repo as a script and a
+tag-triggered workflow. By the time a tag exists the release is already cut, so
+a copyleft hit could only be answered with a retraction, not a fix. It now runs
+earlier, from one shared copy in
+[oss-kit](https://github.com/john-athan/oss-kit), as a gate inside `oss
+release`, before this or any other repository in the fleet is tagged.
 
 ---
 

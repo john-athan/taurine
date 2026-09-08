@@ -230,8 +230,15 @@ func runActivityBatteryTests() {
             Check.that(abs(watts) <= BatteryProbe.plausibleWatts, "the flow is plausible")
             // The sign is the claim worth checking against the gauge's own
             // flags: a charging Mac that reports energy leaving the cell means
-            // the sign convention has moved.
-            if reading.isCharging { Check.that(watts >= 0, "charging means energy going in") }
+            // the sign convention has moved. But a small negative dip while
+            // charging is not that: a heavy build can pull more than a modest
+            // adapter supplies for a moment, and the charging circuit does not
+            // drop out of charging mode for one loaded sample. This machine
+            // showed -6.97 W mid-compile with a 45 W adapter still marked
+            // charging. A real sign flip mirrors the actual charge rate, which
+            // the fixtures above put at 20 W and up, so ten watts of slack
+            // catches a flipped sign without catching a busy CPU.
+            if reading.isCharging { Check.that(watts >= -10, "charging still means energy mostly going in") }
             if !reading.isPluggedIn { Check.that(watts <= 0, "unplugged means energy coming out") }
         }
         if let input = reading.inputWatts {
