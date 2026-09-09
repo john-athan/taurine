@@ -1,4 +1,4 @@
-# Taurine — build & install. Depends only on swiftc (Xcode command line tools).
+# Taurine, build & install. Depends only on swiftc (Xcode command line tools).
 APP     := Taurine.app
 PREFIX  ?= /Applications
 BINDIR  ?= /usr/local/bin

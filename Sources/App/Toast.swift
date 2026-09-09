@@ -4,7 +4,7 @@ import Cocoa
 ///
 /// A borderless, click-through popover that drops out from under the menu bar
 /// icon, plays the bull animation, shows *why* you're now awake, then fades.
-/// It only exists during a toggle — no window, no timer, nothing while idle.
+/// It only exists during a toggle, no window, no timer, nothing while idle.
 final class Toast {
     static let shared = Toast()
 

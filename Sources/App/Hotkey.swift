@@ -5,7 +5,7 @@ import Carbon.HIToolbox
 ///
 /// A single global hotkey (default ⌃⌥⌘R) toggles Taurine from anywhere.
 /// We use Carbon's `RegisterEventHotKey` on purpose: unlike a global NSEvent
-/// monitor, it needs **no Accessibility permission** — nothing for the user to
+/// monitor, it needs **no Accessibility permission**, nothing for the user to
 /// approve, nothing to break on macOS updates.
 final class Hotkey {
     private var ref: EventHotKeyRef?

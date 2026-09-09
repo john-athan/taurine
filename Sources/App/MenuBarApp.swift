@@ -4,7 +4,7 @@ import Cocoa
 ///
 /// Owns the menu bar item and wires every part together: the assertion, the
 /// intent engine, the bull, the inspector, the battery conscience, the hotkey.
-/// Keep this file readable — it's the map of the whole app.
+/// Keep this file readable, it's the map of the whole app.
 final class MenuBarApp: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItemValidation {
 
     // The parts.
@@ -64,7 +64,7 @@ final class MenuBarApp: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuI
     }
 
     // Menu items we mutate.
-    private let statusHeader = NSMenuItem(title: "Taurine — idle", action: nil, keyEquivalent: "")
+    private let statusHeader = NSMenuItem(title: "Taurine: idle", action: nil, keyEquivalent: "")
     private var whyItem: NSMenuItem!
     private var loginItem: NSMenuItem!
     private var systemItem: NSMenuItem!
@@ -143,7 +143,7 @@ final class MenuBarApp: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuI
 
         Toast.shared.play(Bull.run, near: statusItem.button,
                           tint: NSColor(calibratedRed: 1.0, green: 0.28, blue: 0.28, alpha: 1),
-                          caption: "awake — \(intent.label)")
+                          caption: "awake, \(intent.label)")
         render()
         enforceBatteryGuard()
         enforceLidGuard()
@@ -167,14 +167,14 @@ final class MenuBarApp: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuI
     private func enforceBatteryGuard() {
         guard batteryGuard, isAwake, !battery.onACPower,
               let pct = battery.percent, pct < 20 else { return }
-        deactivate(reason: "battery \(pct)% — Taurine stepped back")
+        deactivate(reason: "battery \(pct)%, Taurine stepped back")
     }
 
     // MARK: - lid conscience
 
     /// Drive the clamshell flag to match reality. Engaged only when the user
     /// opted in *and* we're awake *and* on wall power; dropped otherwise. Silent
-    /// on background triggers (unplug, deactivate) — only the menu toggle surfaces
+    /// on background triggers (unplug, deactivate), only the menu toggle surfaces
     /// an admin failure, via `toggleLid`.
     @discardableResult
     private func enforceLidGuard() -> String? {
@@ -198,8 +198,8 @@ final class MenuBarApp: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuI
         // Everything the badge appends after the reason, in reading order.
         let flags = (clamshell.active ? " · lid held" : "")
                   + (letScreenLock ? " · screen may lock" : "")
-        b.toolTip = isAwake ? "Taurine — awake \(intent?.label ?? "")\(flags)" : "Taurine — idle (Mac may sleep)"
-        statusHeader.title = isAwake ? "🐂 awake — \(intent?.label ?? "")\(flags)" : "🐂 idle — Mac may sleep"
+        b.toolTip = isAwake ? "Taurine: awake \(intent?.label ?? "")\(flags)" : "Taurine: idle (Mac may sleep)"
+        statusHeader.title = isAwake ? "🐂 awake: \(intent?.label ?? "")\(flags)" : "🐂 idle, Mac may sleep"
     }
 
     /// SF Symbol as a template image, tolerant of symbols missing on old macOS.
@@ -458,7 +458,7 @@ final class MenuBarApp: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuI
         }
         for h in holders {
             let it = NSMenuItem(title: h.line, action: nil, keyEquivalent: "")
-            it.toolTip = "pid \(h.pid) — “\(h.name)”" + (h.timeout.map { "\n\($0)" } ?? "")
+            it.toolTip = "pid \(h.pid), “\(h.name)”" + (h.timeout.map { "\n\($0)" } ?? "")
             it.isEnabled = false
             menu.addItem(it)
         }
@@ -585,7 +585,7 @@ final class MenuBarApp: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuI
         } else if lidAwake && !battery.onACPower {
             Toast.shared.play(Bull.stop, near: statusItem.button,
                               tint: NSColor(calibratedRed: 0.6, green: 0.6, blue: 0.66, alpha: 1),
-                              caption: "lid guard armed — engages on AC power")
+                              caption: "lid guard armed, engages on AC power")
         }
     }
 

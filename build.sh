@@ -1,5 +1,5 @@
 #!/bin/bash
-# Build Taurine.app from Sources/. No Xcode project, no dependencies — just swiftc.
+# Build Taurine.app from Sources/. No Xcode project, no dependencies, just swiftc.
 set -euo pipefail
 cd "$(dirname "$0")"
 

@@ -116,6 +116,16 @@ enum ChargeConfig {
     /// Desired limit, or nil for "don't limit anything".
     static func read() -> Int? {
         guard let raw = try? String(contentsOfFile: ChargePaths.limit, encoding: .utf8) else { return nil }
+        return parse(raw)
+    }
+
+    /// The range check, on its own so it can be tested without a file.
+    ///
+    /// `config/` is group-writable on purpose, so a second admin account can
+    /// change the limit without a password, and this file is read by a process
+    /// running as root. Anything outside [range] reads as "don't limit", which
+    /// is the safe answer rather than the clever one.
+    static func parse(_ raw: String) -> Int? {
         guard let n = Int(raw.trimmingCharacters(in: .whitespacesAndNewlines)) else { return nil }
         guard range.contains(n) else { return nil }
         return n

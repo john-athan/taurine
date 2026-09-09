@@ -2,10 +2,10 @@ import Foundation
 
 /// The truth serum. 🔎
 ///
-/// macOS already knows exactly which process is keeping your Mac awake — it's
+/// macOS already knows exactly which process is keeping your Mac awake, it's
 /// just buried in `pmset -g assertions`. No toggle app surfaces it. Taurine
 /// does: this parses that output into a tidy list you can read in the menu.
-/// "Why is my Mac awake?" — finally answerable.
+/// "Why is my Mac awake?", finally answerable.
 enum AssertionInspector {
 
     struct Holder {
@@ -21,7 +21,7 @@ enum AssertionInspector {
                 .replacingOccurrences(of: "PreventUserIdle", with: "")
                 .replacingOccurrences(of: "Prevent", with: "")
                 .replacingOccurrences(of: "Sleep", with: "")   // Display / System / …
-            return "\(process) — keeps \(t.isEmpty ? "awake" : t) awake"
+            return "\(process), keeps \(t.isEmpty ? "awake" : t) awake"
         }
     }
 

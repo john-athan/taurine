@@ -2,7 +2,7 @@
 
 # Taurine 🐂
 
-**Keep your Mac awake — with a reason.**
+**Keep your Mac awake, with a reason.**
 
 <img src="assets/taurine.gif" alt="Taurine" width="440">
 
@@ -17,7 +17,7 @@ Tell it *why* to stay up and it lets go on its own:
 taurine -- make build      # awake for exactly this command, then done
 ```
 
-Ask *who's* keeping your Mac awake — Taurine or anything else — and it actually
+Ask *who's* keeping your Mac awake, Taurine or anything else, and it actually
 answers:
 
 ```bash
@@ -55,7 +55,7 @@ brew install john-athan/tap/taurine
 taurine            # launches the menu bar app
 ```
 
-That's it — the `taurine` CLI is on your `PATH` immediately, and running it
+That's it, the `taurine` CLI is on your `PATH` immediately, and running it
 with no arguments launches the menu bar app. Homebrew builds from source on
 your machine, so there's **no "unidentified developer" Gatekeeper prompt** and
 nothing to notarize.
@@ -102,7 +102,7 @@ package manager, no network. See
 
 ## Use
 
-**Menu bar** — click the ⚡ bull for the menu, or hit the global hotkey
+**Menu bar**, click the ⚡ bull for the menu, or hit the global hotkey
 **⌃⌥⌘R** from anywhere to toggle.
 
 The menu gives you:
@@ -119,13 +119,13 @@ The menu gives you:
 | **Things Apple got wrong** | Small fixes the system should have shipped. Currently: scroll direction per device; ⌘X / ⌘V to cut and paste files in Finder; ⌫ to move files to the Trash; ↩ to open them; and ⇧⌘V to paste as plain text in every application. |
 | **Lock the screen now  (⌃⌘Q)** | Locks straight away without asking the Mac to sleep. Everything you started keeps running behind the login window. |
 | **Let the screen lock (Mac keeps working)** | Off by default. On, and Taurine stops holding the *display* up, so your screen darkens and locks on its usual schedule while the machine stays fully awake. This is `caffeinate -i`. |
-| **Also prevent system sleep** | Not just the display — the whole machine (for long jobs). |
-| **Keep awake with lid closed (AC only)** | Off by default — a closed lid sleeps normally. On, and only while awake + plugged in, Taurine holds the lid open too (`pmset disablesleep`, needs admin). Reverts on unplug, toggle-off, or quit. |
+| **Also prevent system sleep** | Not just the display, the whole machine (for long jobs). |
+| **Keep awake with lid closed (AC only)** | Off by default, a closed lid sleeps normally. On, and only while awake + plugged in, Taurine holds the lid open too (`pmset disablesleep`, needs admin). Reverts on unplug, toggle-off, or quit. |
 | **Auto-off under 20% on battery** | The conscience. Won't drain your laptop overnight. |
 | **Start awake at launch** / **Start at login** | Set once, forget. |
 
 > **Lid-closed, carefully.** Ordinary sleep assertions (everything else Taurine
-> does) don't survive a shut lid — that's *clamshell* sleep, a separate path. The
+> does) don't survive a shut lid, that's *clamshell* sleep, a separate path. The
 > only lever is `pmset disablesleep`, which is system-wide and persistent, so
 > Taurine engages it only while awake + on AC and always puts it back. A hard
 > crash can leave it set; if a closed lid ever won't sleep, run

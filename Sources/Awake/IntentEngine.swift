@@ -97,7 +97,7 @@ enum CommandMode {
 
         if mayLock { print("🔒 the screen may darken and lock; the command keeps running.") }
         print(Bull.charging)
-        print("🐂 taurine — holding the line while `\(pretty)` runs…\n")
+        print("🐂 taurine, holding the line while `\(pretty)` runs…\n")
 
         let p = Process()
         p.executableURL = URL(fileURLWithPath: "/usr/bin/env")
@@ -116,7 +116,7 @@ enum CommandMode {
         assertion.release()
 
         print("\n" + Bull.grazing)
-        print("🐂 done — Taurine let go. (`\(pretty)` exited \(p.terminationStatus))")
+        print("🐂 done, Taurine let go. (`\(pretty)` exited \(p.terminationStatus))")
         return p.terminationStatus
     }
 }

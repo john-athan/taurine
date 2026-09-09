@@ -5,7 +5,7 @@ import IOKit.pwr_mgt
 ///
 /// Everything Taurine does ultimately comes down to one primitive: an IOKit
 /// *power assertion*. An assertion is a passive flag you hand the kernel that
-/// says "please don't sleep." It costs nothing to hold — no timer, no polling,
+/// says "please don't sleep." It costs nothing to hold, no timer, no polling,
 /// no CPU. When you let go (or your process dies), the kernel forgets it.
 ///
 /// `caffeinate -d` is literally this, wrapped in a CLI. We wrap it in a bull.
@@ -26,7 +26,7 @@ struct SleepGuard: OptionSet {
 }
 
 /// Holds one or more kernel assertions and, crucially, remembers *why*.
-/// The "why" is the whole point of Taurine — a reason you can read, and that
+/// The "why" is the whole point of Taurine, a reason you can read, and that
 /// can end on its own.
 final class PowerAssertion {
     private(set) var isHeld = false
@@ -43,7 +43,7 @@ final class PowerAssertion {
             let ok = IOPMAssertionCreateWithName(
                 type as CFString,
                 IOPMAssertionLevel(kIOPMAssertionLevelOn),
-                "Taurine — \(reason)" as CFString,
+                "Taurine: \(reason)" as CFString,
                 &id)
             if ok == kIOReturnSuccess { acquired.append(id) }
         }

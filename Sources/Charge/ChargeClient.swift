@@ -89,6 +89,31 @@ enum ChargeInstaller {
         return sizeA != sizeB || dateA != dateB
     }
 
+    /// A directory to stage the daemon plist in, created by this call and
+    /// readable only by this user.
+    ///
+    /// The root command in `install` copies the staged file into
+    /// `/Library/LaunchDaemons`, so whoever controls it between the write and
+    /// that copy decides which program root runs at boot. This used to be a
+    /// fixed name in the shared temporary directory, which left that window open
+    /// to anything else running as this user: wait for the file to appear, swap
+    /// it, and the password typed for Taurine installs someone else's daemon.
+    ///
+    /// `withIntermediateDirectories: false` makes creation *fail* on a directory
+    /// that already exists rather than adopt it, so this is exclusive creation
+    /// and the unguessable name is a second line rather than the first.
+    ///
+    /// Separate from `install` so it can be tested without an admin prompt.
+    static func makeStagingDirectory() throws -> URL {
+        let dir = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
+            .appendingPathComponent("taurine-install-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: dir,
+            withIntermediateDirectories: false,
+            attributes: [.posixPermissions: 0o700])
+        return dir
+    }
+
     /// Install (or refresh) the privileged helper and its LaunchDaemon. One prompt.
     static func install() -> String? {
         guard let exe = Bundle.main.executablePath else {
@@ -118,10 +143,17 @@ enum ChargeInstaller {
         </plist>
         """
 
-        let staged = NSTemporaryDirectory() + "taurine-charge.plist"
+        let stageDir: URL
+        do { stageDir = try makeStagingDirectory() }
+        catch { return "Couldn't stage the daemon: \(error.localizedDescription)" }
+        defer { try? FileManager.default.removeItem(at: stageDir) }
+
+        let staged = stageDir.appendingPathComponent("taurine-charge.plist").path
         guard Admin.isShellSafe(staged) else {
             return "Your temporary directory has an unusual path; can't stage the installer safely."
         }
+        // `atomically` writes beside the target and renames, so it stays inside
+        // the directory created above rather than passing through a shared one.
         do { try plist.write(toFile: staged, atomically: true, encoding: .utf8) }
         catch { return "Couldn't stage the daemon: \(error.localizedDescription)" }
 
@@ -140,7 +172,6 @@ enum ChargeInstaller {
         ].joined(separator: "; ")
 
         if let err = Admin.run(cmd) { return err }
-        try? FileManager.default.removeItem(atPath: staged)
         return nil
     }
 

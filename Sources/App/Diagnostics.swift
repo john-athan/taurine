@@ -4,7 +4,7 @@ import Darwin
 /// The receipts. 📊
 ///
 /// Every caffeine app claims to be "lightweight." Taurine *measures* its own
-/// footprint instead of asserting it — every number in the menu badge is read
+/// footprint instead of asserting it, every number in the menu badge is read
 /// live from the kernel, not hard-coded:
 ///   • resident memory via `task_info`
 ///   • open BSD sockets via `proc_pidinfo` (libproc)
@@ -36,7 +36,7 @@ enum Diagnostics {
 
     /// BSD sockets this process currently holds open, counted from the kernel's
     /// file-descriptor table. (AppKit and our IPC use mach ports, not sockets,
-    /// so in normal operation this really is 0 — and now you can verify it.)
+    /// so in normal operation this really is 0, and now you can verify it.)
     static var openSocketCount: Int {
         let pid = getpid()
         let size = proc_pidinfo(pid, PROC_PIDLISTFDS, 0, nil, 0)

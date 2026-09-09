@@ -2,12 +2,12 @@ import Foundation
 
 /// The stubborn horn. 🐂🔒
 ///
-/// Idle power assertions (the rest of Taurine) do **not** survive a closed lid —
+/// Idle power assertions (the rest of Taurine) do **not** survive a closed lid,
 /// that's *clamshell* sleep, a separate kernel path. The only supported lever is
 /// `pmset disablesleep`, a system-wide flag that needs admin rights and, unlike
 /// an assertion, **persists** until something flips it back. That persistence is
 /// the danger: a Mac left awake with the lid shut can cook in a bag. So this
-/// guard is deliberately blunt and defensive —
+/// guard is deliberately blunt and defensive,
 ///   • engaged only while Taurine is awake, on AC power, and you asked for it
 ///   • reverted the instant any of those stops being true, and on quit
 ///   • idempotent: it prompts for admin only when the flag actually changes
@@ -29,7 +29,7 @@ final class ClamshellGuard {
         return nil
     }
 
-    /// Best-effort revert with no prompt tolerance — used on quit.
+    /// Best-effort revert with no prompt tolerance, used on quit.
     func revertQuietly() {
         guard active else { return }
         _ = run(disablesleep: false)
@@ -56,7 +56,7 @@ final class ClamshellGuard {
             let msg = String(data: errPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
             // osascript -128 == user cancelled the auth dialog.
             if msg.contains("-128") || msg.contains("User canceled") {
-                return "Cancelled — admin permission is required to keep the Mac awake with the lid closed."
+                return "Cancelled, admin permission is required to keep the Mac awake with the lid closed."
             }
             return msg.isEmpty ? "pmset failed (exit \(p.terminationStatus))." : msg
         }
