@@ -29,24 +29,6 @@ belong here with the date and the reasoning, so the next reader does not
 repeat the investigation. What follows is the author's own assessment and not
 legal advice.
 
-### The SMC charge keys, and the `CH0C` finding (2026-08-14)
-
-`Sources/Charge/ChargeLimit.swift` credits a contributor to
-[AlDente](https://github.com/davidwernhart/AlDente) for the fact that `CH0B`
-alone is not enough on pre-26 Apple silicon: without `CH0C` set as well,
-charging can quietly resume during sleep. That is a fact about how an
-undocumented Apple interface behaves, discovered by someone else and recorded
-here with the credit attached. No AlDente code was read into this repository,
-and the two implementations do not resemble each other: AlDente drives a bundled
-`smc` executable, `Sources/Charge/SMC.swift` holds one `IOServiceOpen` for the
-life of the process.
-
-The same applies to the 80-byte `SMCKeyData_t` layout that file encodes. It is
-the shape AppleSMC expects, published in Apple's own kext sources and reproduced
-in every SMC tool since, several of them GPL. The offsets are the interface; the
-code that assembles them here was written by hand, byte by byte, precisely so it
-did not have to be taken from anywhere.
-
 ### The `pmset -g` fixture, and the `caffeinate + prevented` finding (2026-08-19, closed 2026-09-09)
 
 `Tests/ScreenLockTests.swift` embeds real `pmset -g` output so `LockPolicy.parse`

@@ -16,3 +16,4 @@ decided, and what it costs.
 | [8](0008-one-shortcut-for-pasting-plain-text.md) | One shortcut for pasting plain text, written as a preference rather than tapped |
 | [9](0009-the-battery-is-read-from-the-gauge.md) | The battery is read from the gauge, and the wall figure has to corroborate itself |
 | [10](0010-awake-with-the-screen-locked.md) | Awake with the screen locked is the same session minus one assertion |
+| [11](0011-the-charge-limit-belongs-to-macos.md) | The charge limit belongs to macOS |

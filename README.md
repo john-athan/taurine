@@ -115,7 +115,6 @@ The menu gives you:
 | **Why is my Mac awake?** | Live list of every process holding a sleep assertion. |
 | **What is this Mac doing?** | The activity panel: cores, GPU, watts, battery, memory, disk, network. Costs nothing until you open it. |
 | *(the badge)* | `45.2 MB · 0 timers · 0 sockets`, read live from the kernel every time the menu opens. Not a claim, a measurement. |
-| **Charge limit** | Stop charging at 60–90% to spare the cell. One admin prompt to install, then free forever. |
 | **Things Apple got wrong** | Small fixes the system should have shipped. Currently: scroll direction per device; ⌘X / ⌘V to cut and paste files in Finder; ⌫ to move files to the Trash; ↩ to open them; and ⇧⌘V to paste as plain text in every application. |
 | **Lock the screen now  (⌃⌘Q)** | Locks straight away without asking the Mac to sleep. Everything you started keeps running behind the login window. |
 | **Let the screen lock (Mac keeps working)** | Off by default. On, and Taurine stops holding the *display* up, so your screen darkens and locks on its usual schedule while the machine stays fully awake. This is `caffeinate -i`. |
@@ -274,38 +273,10 @@ preference beats a system-wide keyboard tap, and what it does not cover, is in
 
 ## Charge limit 🔋
 
-Lithium cells age fastest sitting at 100%. Taurine can stop charging at 80% and
-hold there while you stay plugged in.
-
-```bash
-taurine batt              # what's it doing right now?
-taurine batt 80           # stop charging at 80%
-taurine batt off          # back to charging all the way
-taurine batt unlock       # escape hatch, see below
-```
-
-Enable it once from **Charge limit → Enable charge limiting…** in the menu. That
-installs a small root LaunchDaemon (the same binary, run with `--charge-daemon`)
-and asks for your password once. After that, changing the limit is just a number
-written to a file the daemon is watching, so it never prompts again.
-
-**How it works.** The System Management Controller has a key that decides whether
-the wall adapter may charge the cell: `CHTE` on macOS 26+, `CH0B`+`CH0C` before
-that. Taurine probes which one your Mac has rather than checking a version
-number, and talks to it directly through IOKit. There's no bundled `smc` binary
-and nothing gets shelled out.
-
-**It costs you nothing to run.** No timers, no polling, no 30-second wake-ups.
-The daemon sleeps in `mach_msg` at 0% CPU and is woken only by the kernel: a
-power-source change, a wake from sleep, or you picking a new limit. It writes to
-the SMC a couple of times a day, and a 3% deadband below the limit keeps it from
-flapping at the boundary.
-
-> **The escape hatch.** The inhibit bit lives in the SMC, not in the daemon, so a
-> hard kill at the wrong moment could leave a Mac that won't charge. `KeepAlive`
-> plus a recover-on-start covers this, and any clean exit releases the bit. If it
-> ever does get stuck, `taurine batt unlock` clears it unconditionally. Run
-> `make uninstall` and the daemon is released before its binary is removed.
+macOS 27 has one built in: **System Settings → Battery**. Taurine's own daemon
+is gone ([ADR 11](docs/adr/0011-the-charge-limit-belongs-to-macos.md)). If an
+older version installed it, **Remove old charge daemon…** appears in the menu
+until you use it.
 
 ---
 
@@ -318,10 +289,6 @@ taurine why                # who is keeping this Mac awake right now?
 taurine lock               # lock the screen now, without sleeping
 taurine lockable on|off    # let the screen lock while awake (Mac keeps working)
 taurine on | off | toggle  # drive the running menu bar app
-taurine batt               # show the charge limit
-taurine batt 80            # stop charging at 80%
-taurine batt off           # charge to 100% again
-taurine batt unlock        # force-permit charging (if the daemon ever dies)
 taurine help
 ```
 

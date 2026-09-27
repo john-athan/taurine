@@ -8,56 +8,13 @@ import Cocoa
 ///
 /// This lets `taurine` feel like a native tool while still being the GUI.
 
-/// `taurine batt [80|off]`. Reads state straight off disk and writes the limit
-/// straight to disk; the daemon notices by itself. No running GUI required.
-func chargeCLI(_ args: [String]) -> Int32 {
-    guard let arg = args.first else {
-        guard let s = ChargeState.read() else {
-            print("🔋 Charge limiting isn't installed. Enable it from the Taurine menu.")
-            return 0
-        }
-        print("🔋 \(s.summary)  [\(s.path.rawValue)]")
-        return 0
+/// `taurine batt`. The charge limit is a macOS setting now (ADR 11); this
+/// only points there, for the fingers that still type it.
+func chargeCLI() -> Int32 {
+    print("🔋 Charge limiting is built into macOS now: System Settings → Battery.")
+    if OldChargeDaemon.isInstalled {
+        print("   The daemon an older Taurine installed is still here. Remove it from the Taurine menu.")
     }
-
-    // Escape hatch. Works whether or not the daemon is alive, which is the
-    // entire point of it: it exists for when the daemon is *not* alive.
-    if arg.lowercased() == "unlock" {
-        if geteuid() == 0 { return ChargeDaemon.forcePermitCharging() }
-        guard let exe = Bundle.main.executablePath ?? CommandLine.arguments.first else { return 1 }
-        if let err = Admin.run("'\(exe)' --charge-unlock") {
-            FileHandle.standardError.write(Data("taurine: \(err)\n".utf8))
-            return 1
-        }
-        print("🔋 Charging permitted again.")
-        return 0
-    }
-
-    guard ChargeInstaller.isInstalled else {
-        FileHandle.standardError.write(Data(
-            "taurine: charge limiting isn't installed yet. Enable it once from the Taurine menu.\n".utf8))
-        return 1
-    }
-
-    let limit: Int?
-    switch arg.lowercased() {
-    case "off", "none", "100":
-        limit = nil
-    default:
-        let lo = ChargeConfig.range.lowerBound, hi = ChargeConfig.range.upperBound
-        guard let n = Int(arg), ChargeConfig.range.contains(n) else {
-            FileHandle.standardError.write(Data(
-                "taurine: limit must be between \(lo) and \(hi), or 'off'.\n".utf8))
-            return 2
-        }
-        limit = n
-    }
-
-    if let err = ChargeConfig.write(limit) {
-        FileHandle.standardError.write(Data("taurine: \(err)\n".utf8))
-        return 1
-    }
-    print(limit.map { "🔋 Charging will stop at \($0)%." } ?? "🔋 Charge limit off; charging to 100%.")
     return 0
 }
 
@@ -65,17 +22,8 @@ func runCLI(_ args: [String]) -> Int32? {
     guard let first = args.first else { return nil }   // no args → launch GUI
 
     switch first {
-    case "--charge-unlock":
-        // Re-entry point for `taurine batt unlock` after it elevates.
-        return ChargeDaemon.forcePermitCharging()
-
-    case "--charge-daemon":
-        // Not a user-facing command: this is what the LaunchDaemon execs as root.
-        // Deliberately handled before any AppKit touches the process.
-        return ChargeDaemon().run()
-
     case "batt", "charge":
-        return chargeCLI(Array(args.dropFirst()))
+        return chargeCLI()
 
     case "--", "run":
         // taurine -- <command …>   (alone; holds the line for the command's life)
@@ -149,10 +97,6 @@ func runCLI(_ args: [String]) -> Int32? {
           taurine lock            lock the screen now, without sleeping
           taurine lockable [on|off]
                                   let the screen lock while awake (Mac keeps working)
-          taurine batt            show the charge limit
-          taurine batt 80         stop charging at 80%
-          taurine batt off        charge to 100% again
-          taurine batt unlock     force-permit charging (if the daemon ever dies)
           taurine help            this text
         """)
         return 0

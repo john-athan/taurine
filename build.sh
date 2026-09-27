@@ -9,7 +9,7 @@ BIN="$APP/Contents/MacOS/taurine"
 echo "▸ compiling…"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS"
-# Sources/ is grouped by subsystem (App, Awake, Charge, Activity, Scroll, Finder,
+# Sources/ is grouped by subsystem (App, Awake, Activity, Scroll, Finder,
 # Paste), so the file list is gathered rather than globbed. Sorted, so a build
 # is reproducible.
 SOURCES=()
