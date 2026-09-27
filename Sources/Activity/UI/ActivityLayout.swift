@@ -1,6 +1,6 @@
 import CoreGraphics
 
-/// The grid. 📐
+/// The grid.
 ///
 /// The arithmetic that decides where things go, pulled out of the views that
 /// draw them. None of these functions touch AppKit, none of them read a sample,

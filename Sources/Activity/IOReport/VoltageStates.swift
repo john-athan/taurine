@@ -1,7 +1,7 @@
 import Foundation
 import IOKit
 
-/// The frequency table. 🎚️
+/// The frequency table.
 ///
 /// IOReport says how many ticks a core spent in state five. It does not say
 /// what state five runs at. That number lives somewhere else entirely: in the

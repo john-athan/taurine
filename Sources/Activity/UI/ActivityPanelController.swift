@@ -1,6 +1,6 @@
 import Cocoa
 
-/// The shutter. 🎛️
+/// The shutter.
 ///
 /// Opens the panel, and closes everything behind it. This is the object that
 /// makes ADR 0002 true: the monitor starts in `popoverWillShow` and stops in

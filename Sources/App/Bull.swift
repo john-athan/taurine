@@ -1,6 +1,6 @@
 import Foundation
 
-/// The herd. 🐂
+/// The herd.
 ///
 /// A bull has moods. When Taurine is idle the bull grazes; when it's holding
 /// the line it gallops left→right, kicking up a dust trail of `»`. This is the

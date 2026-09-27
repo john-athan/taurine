@@ -1,7 +1,7 @@
 import Foundation
 import ServiceManagement
 
-/// The habit. 🌅
+/// The habit.
 ///
 /// Thin wrapper over `SMAppService.mainApp`, the modern (macOS 13+) way to be
 /// a login item. No helper bundle, no AppleScript poking at System Events, no

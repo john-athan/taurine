@@ -1,6 +1,6 @@
 import Cocoa
 
-/// The tile. 🧱
+/// The tile.
 ///
 /// What every section of the panel has in common: a small-caps title with an
 /// optional value on the right, a body drawn underneath it, a height it asks

@@ -1,6 +1,6 @@
 import Foundation
 
-/// The odometer. 🧮
+/// The odometer.
 ///
 /// Three of the six probes ask the kernel the same shape of question: give me a
 /// number that only ever goes up, and I will tell you how fast it is going up.
@@ -57,7 +57,7 @@ struct ByteCounters {
     var outbound: UInt64
 }
 
-/// The books. 📚
+/// The books.
 ///
 /// Disks and network interfaces are not one counter each, they are a shifting
 /// set of counters: a USB drive is plugged in, a VPN comes up, a Thunderbolt

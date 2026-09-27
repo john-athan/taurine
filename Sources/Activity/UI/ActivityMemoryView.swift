@@ -1,6 +1,6 @@
 import Cocoa
 
-/// The ledger. 🧠
+/// The ledger.
 ///
 /// One bar showing where the RAM went, split into the three categories that
 /// behave differently: apps, which you can quit; wired, which you cannot; and

@@ -1,6 +1,6 @@
 import Foundation
 
-/// The wattmeter. ⚡
+/// The wattmeter.
 ///
 /// The one probe that answers a question no public API answers: how many watts
 /// this chip is burning, and how fast each cluster is actually clocked.

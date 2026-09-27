@@ -1,6 +1,6 @@
 import Foundation
 
-/// The tachometer. 🏎️
+/// The tachometer.
 ///
 /// `host_processor_info(PROCESSOR_CPU_LOAD_INFO)` is the only public way to see
 /// each core separately, and it hands back exactly what the scheduler keeps: a

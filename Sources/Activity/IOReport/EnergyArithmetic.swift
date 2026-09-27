@@ -1,6 +1,6 @@
 import Foundation
 
-/// The arithmetic. 🧮
+/// The arithmetic.
 ///
 /// Everything in this file is a pure function over numbers and strings that
 /// IOReport handed us, which is deliberate: the parts of a power reading that

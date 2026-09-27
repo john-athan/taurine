@@ -1,6 +1,6 @@
 import Foundation
 
-/// The inventory. 🧠
+/// The inventory.
 ///
 /// Memory is the number people are most likely to have a second opinion about,
 /// because Activity Monitor is open on the next Space. So this probe reproduces

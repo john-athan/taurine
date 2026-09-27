@@ -1,6 +1,6 @@
 import CoreGraphics
 
-/// The tell. 🖐️
+/// The tell.
 ///
 /// Every scroll event carries the evidence of what produced it, so Taurine never
 /// asks *which device is this* (a question that needs a vendor table, goes stale

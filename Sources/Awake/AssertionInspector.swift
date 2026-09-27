@@ -1,6 +1,6 @@
 import Foundation
 
-/// The truth serum. 🔎
+/// The truth serum.
 ///
 /// macOS already knows exactly which process is keeping your Mac awake, it's
 /// just buried in `pmset -g assertions`. No toggle app surfaces it. Taurine

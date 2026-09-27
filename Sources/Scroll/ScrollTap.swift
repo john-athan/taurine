@@ -1,7 +1,7 @@
 import CoreGraphics
 import Foundation
 
-/// The scroll fix's half of the tap. ↕️🧵
+/// The scroll fix's half of the tap.
 ///
 /// `EventTap` owns the thread, the port, the re-arming and the teardown, all of
 /// which are the same for every fix that has to change an event. What is left

@@ -1,7 +1,7 @@
 import Foundation
 import IOKit
 
-/// The spindle. 💽
+/// The spindle.
 ///
 /// There is no public per-disk throughput API on macOS. What there is, is the
 /// IO registry: every block device is driven by an `IOBlockStorageDriver`, and

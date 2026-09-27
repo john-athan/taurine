@@ -1,7 +1,7 @@
 import Carbon.HIToolbox
 import CoreGraphics
 
-/// The verdict, for all three Finder keys. ✂️🗑️↩️
+/// The verdict, for all three Finder keys.
 ///
 /// Finder answers a set of keystrokes that nobody's hands know, and ignores the
 /// ones they do. Every fix here is the same shape: **no new behaviour is

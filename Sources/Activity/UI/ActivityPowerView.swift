@@ -1,6 +1,6 @@
 import Cocoa
 
-/// The bill. ⚡
+/// The bill.
 ///
 /// The number people open this panel for, and the only place the accent colour
 /// is spent on data. Everything above and below it is greys at eleven points;

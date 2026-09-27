@@ -1,6 +1,6 @@
 import Cocoa
 
-/// The panel. 📊
+/// The panel.
 ///
 /// The whole readout: a nameplate, six tiles and a footer, stacked down one
 /// sixteen-point margin. It owns the tiles, hands each of them every sample and

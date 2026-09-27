@@ -1,7 +1,7 @@
 import AppKit
 import ApplicationServices
 
-/// The doorman. 🚪
+/// The doorman.
 ///
 /// Watching events needs nothing. *Changing* them, and asking another
 /// application what it has focused, both need Accessibility, so this is the one

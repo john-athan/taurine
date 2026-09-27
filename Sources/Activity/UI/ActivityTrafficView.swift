@@ -1,6 +1,6 @@
 import Cocoa
 
-/// The pipes. 🔀
+/// The pipes.
 ///
 /// Two rows of the same shape, used twice: disk read and write, network in and
 /// out. One class rather than two, because the only difference between a disk

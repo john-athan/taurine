@@ -1,6 +1,6 @@
 import Cocoa
 
-/// The pen. ✒️
+/// The pen.
 ///
 /// The handful of marks the panel is made of: a piece of text, a rounded bar, a
 /// meter, a sparkline, a pill. Six section views draw the same five shapes, and

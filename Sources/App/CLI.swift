@@ -1,6 +1,6 @@
 import Cocoa
 
-/// The gate. 🚪
+/// The gate.
 ///
 /// One binary, two lives:
 ///   • no args        → the menu bar app (a bull in your status bar)

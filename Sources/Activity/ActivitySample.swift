@@ -1,6 +1,6 @@
 import Foundation
 
-/// The readout. 📈
+/// The readout.
 ///
 /// One instant of what the machine is doing, as plain value types. Nothing in
 /// here talks to the kernel; the probes in `Sources/Activity/Probes` do that and

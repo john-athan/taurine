@@ -1,6 +1,6 @@
 import Cocoa
 
-/// The palette. 🎨
+/// The palette.
 ///
 /// Every colour, font and measurement the panel uses, in one place, so that a
 /// row added later lands on the same grid as the rows above it without anybody

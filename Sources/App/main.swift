@@ -1,6 +1,6 @@
 import Cocoa
 
-/// The ignition. 🔑
+/// The ignition.
 ///
 /// Every decision about *what* this invocation is lives in `CLI.swift`; this
 /// file is only the six lines that can't live anywhere else, because Swift

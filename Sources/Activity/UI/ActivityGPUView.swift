@@ -1,6 +1,6 @@
 import Cocoa
 
-/// The graphics core. 🎮
+/// The graphics core.
 ///
 /// One number and one bar. The GPU has no clusters and no per-core visibility
 /// worth the name, so pretending otherwise with a comb of fake cores would be

@@ -1,7 +1,7 @@
 import Foundation
 import IOKit.ps
 
-/// The conscience. 🔋
+/// The conscience.
 ///
 /// Keeping a laptop awake all night on battery is how you wake up to 3%.
 /// Taurine can watch the power source and, if you ask it to, drop the

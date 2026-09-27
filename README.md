@@ -1,6 +1,6 @@
 <div align="center">
 
-# Taurine 🐂
+# Taurine
 
 **Keep your Mac awake, with a reason.**
 
@@ -102,7 +102,7 @@ package manager, no network. See
 
 ## Use
 
-**Menu bar**, click the ⚡ bull for the menu, or hit the global hotkey
+**Menu bar**, click the bull for the menu, or hit the global hotkey
 **⌃⌥⌘R** from anywhere to toggle.
 
 The menu gives you:
@@ -143,7 +143,7 @@ The menu gives you:
 
 ---
 
-## What is this Mac doing? 📈
+## What is this Mac doing?
 
 Everything `mactop` shows you in a terminal, in a panel that drops out of the
 menu bar: per-cluster and per-core load with the frequency each cluster is
@@ -182,7 +182,7 @@ line at the bottom naming what is missing and why.
 
 ---
 
-## Things Apple got wrong ⚙️
+## Things Apple got wrong
 
 A shelf for settings the system should have shipped correctly. The rule for
 what belongs here: small, local, reversible, and obviously right once you see
@@ -274,7 +274,7 @@ preference beats a system-wide keyboard tap, and what it does not cover, is in
 
 ---
 
-## Charge limit 🔋
+## Charge limit
 
 macOS 27 has one built in: **System Settings → Battery**. Taurine's own daemon
 is gone ([ADR 11](docs/adr/0011-the-charge-limit-belongs-to-macos.md)). If an
@@ -283,7 +283,7 @@ until you use it.
 
 ---
 
-## CLI 💻
+## CLI
 
 ```bash
 taurine                    # launch the menu bar app

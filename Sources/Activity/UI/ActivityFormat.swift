@@ -1,6 +1,6 @@
 import Foundation
 
-/// The units. 📏
+/// The units.
 ///
 /// Every number the panel shows passes through here, so that a watt looks like
 /// a watt in the headline and in the VoiceOver sentence, and so that the rules

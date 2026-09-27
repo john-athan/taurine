@@ -1,6 +1,6 @@
 import Foundation
 
-/// The turnstile. 🌐
+/// The turnstile.
 ///
 /// `net.link.generic.ifdata.<index>.general` answers with one `ifmibdata` per
 /// interface, and the `if_data64` inside it carries that interface's lifetime

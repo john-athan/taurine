@@ -1,6 +1,6 @@
 import Foundation
 
-/// The reason to be awake. 🎯
+/// The reason to be awake.
 ///
 /// This is the wedge. Every other app toggles a *state*. Taurine binds wakeing
 /// to an *intent* and lets it end on its own:

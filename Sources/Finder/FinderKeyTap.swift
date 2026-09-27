@@ -3,7 +3,7 @@ import ApplicationServices
 import Carbon.HIToolbox
 import CoreGraphics
 
-/// The Finder shelf's half of the tap, and the bookkeeping of a pending cut. ✂️🧵
+/// The Finder shelf's half of the tap, and the bookkeeping of a pending cut.
 ///
 /// `EventTap` owns the thread, the port, the re-arming and the teardown. What is
 /// here is what is only true of these fixes: which keys can possibly matter, the

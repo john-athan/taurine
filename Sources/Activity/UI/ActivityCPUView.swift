@@ -1,6 +1,6 @@
 import Cocoa
 
-/// The clusters. 🧮
+/// The clusters.
 ///
 /// One row per cluster: its name, a comb of per-core micro-bars, its busy
 /// percentage and its clock. The comb is the point. A single averaged

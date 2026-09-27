@@ -1,6 +1,6 @@
 import AppKit
 
-/// The Finder shelf. ✂️🗑️↩️
+/// The Finder shelf.
 ///
 /// Three keys that Finder answers differently from every other file manager
 /// anyone has used, and one tap that fixes whichever of them you asked for.

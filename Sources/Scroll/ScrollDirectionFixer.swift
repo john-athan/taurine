@@ -1,6 +1,6 @@
 import AppKit
 
-/// The interpreter. 🌀
+/// The interpreter.
 ///
 /// Sits between the devices and the applications, reads every scroll event once,
 /// and reverses the ones ADR 0004 says the system got backwards. Everything hard

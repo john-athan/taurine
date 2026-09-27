@@ -1,6 +1,6 @@
 import Foundation
 
-/// The lab bench. 🧪
+/// The lab bench.
 ///
 /// Taurine builds with `swiftc` and nothing else: no Xcode project, no SwiftPM,
 /// no package resolution, no network. A test framework that demanded any of
@@ -116,7 +116,7 @@ enum Check {
     }
 }
 
-/// The only outward sign that an event tap exists. 🧵
+/// The only outward sign that an event tap exists.
 ///
 /// A tap is a port, a run loop and a thread, and of those only the thread has a
 /// name this process can read back. So "is a tap armed", "did starting twice arm

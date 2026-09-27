@@ -1,7 +1,7 @@
 import Foundation
 import Darwin
 
-/// The receipts. 📊
+/// The receipts.
 ///
 /// Every caffeine app claims to be "lightweight." Taurine *measures* its own
 /// footprint instead of asserting it, every number in the menu badge is read

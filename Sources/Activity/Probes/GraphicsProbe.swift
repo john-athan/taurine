@@ -1,7 +1,7 @@
 import Foundation
 import IOKit
 
-/// The gauge. 🎮
+/// The gauge.
 ///
 /// The GPU is the one number in this panel that the kernel already computes for
 /// us. Every accelerator publishes a `PerformanceStatistics` dictionary in the

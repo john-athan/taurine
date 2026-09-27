@@ -1,6 +1,6 @@
 import Foundation
 
-/// The shape of this particular chip. 🧬
+/// The shape of this particular chip.
 ///
 /// Read once from `hw.perflevel*` and then never again: core counts do not
 /// change while a process lives, and re-reading them every second would be

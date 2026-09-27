@@ -1,6 +1,6 @@
 import Cocoa
 
-/// The nameplate. 🏷️
+/// The nameplate.
 ///
 /// Which Mac this is, and whether it is currently too hot to be itself. Two
 /// facts, one line, no chrome.

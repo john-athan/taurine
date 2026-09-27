@@ -1,6 +1,6 @@
 import Foundation
 
-/// The probe against the machine it is running on. 🔌
+/// The probe against the machine it is running on.
 ///
 /// The arithmetic is tested elsewhere, without hardware. What is left is
 /// everything that only reality can answer: whether the private framework still

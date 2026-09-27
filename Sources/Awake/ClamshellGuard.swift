@@ -1,6 +1,6 @@
 import Foundation
 
-/// The stubborn horn. 🐂🔒
+/// The stubborn horn.
 ///
 /// Idle power assertions (the rest of Taurine) do **not** survive a closed lid,
 /// that's *clamshell* sleep, a separate kernel path. The only supported lever is

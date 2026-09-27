@@ -1,6 +1,6 @@
 import Cocoa
 
-/// The rancher. 🤠
+/// The rancher.
 ///
 /// Owns the menu bar item and wires every part together: the assertion, the
 /// intent engine, the bull, the inspector, the battery conscience, the hotkey.

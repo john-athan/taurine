@@ -1,6 +1,6 @@
 import Foundation
 
-/// The roll call. 📋
+/// The roll call.
 ///
 /// The one place that knows which probes exist and, more importantly, in which
 /// order they run. Two of them enrich what an earlier one produced, so the

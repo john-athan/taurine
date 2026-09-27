@@ -1,6 +1,6 @@
 import Foundation
 
-/// The stall door. 🔒
+/// The stall door.
 ///
 /// Locking the screen and staying awake look like opposites, and in every other
 /// caffeine app they are. They are only tangled because of one assertion: hold

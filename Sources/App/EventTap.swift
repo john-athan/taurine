@@ -1,7 +1,7 @@
 import CoreGraphics
 import Foundation
 
-/// The tap, its thread, and the one cell they share. 🧵
+/// The tap, its thread, and the one cell they share.
 ///
 /// Every fix on the "things Apple got wrong" shelf that has to change an event
 /// before an application sees it comes through here. The callback is a C

@@ -1,6 +1,6 @@
 import Cocoa
 
-/// The tank. 🔋
+/// The tank.
 ///
 /// One bar for how full the cell is, and one row underneath saying which way
 /// the energy is moving and how fast. It sits directly under the power tile

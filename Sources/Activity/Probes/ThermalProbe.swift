@@ -1,6 +1,6 @@
 import Foundation
 
-/// The thermostat. 🌡️
+/// The thermostat.
 ///
 /// The smallest probe in the panel, and the only one whose interest is in what
 /// it refuses to do. Every other Mac system monitor shows temperatures, read

@@ -1,6 +1,6 @@
 import Cocoa
 
-/// The stage. 🎬
+/// The stage.
 ///
 /// A borderless, click-through popover that drops out from under the menu bar
 /// icon, plays the bull animation, shows *why* you're now awake, then fades.

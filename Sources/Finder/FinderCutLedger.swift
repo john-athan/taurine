@@ -1,6 +1,6 @@
 import Foundation
 
-/// The memory of a cut, and the pasteboard arithmetic that keeps it honest. 🧾
+/// The memory of a cut, and the pasteboard arithmetic that keeps it honest.
 ///
 /// A cut is a promise about the *next* ⌘V, made a second or a minute earlier,
 /// and the danger is entirely in that gap. If Taurine remembers a cut that the

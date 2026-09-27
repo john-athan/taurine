@@ -1,6 +1,6 @@
 import Foundation
 
-/// The narrator. 🗣️
+/// The narrator.
 ///
 /// What VoiceOver says about each tile. A panel made of hand-drawn views has no
 /// text for the accessibility system to find: without this file the whole thing

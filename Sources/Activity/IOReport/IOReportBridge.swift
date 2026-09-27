@@ -1,6 +1,6 @@
 import Foundation
 
-/// The keyhole. 🔑
+/// The keyhole.
 ///
 /// `IOReport` is where `powermetrics` gets its numbers, and it is the only way
 /// to read this chip's energy counters without a root password (ADR 0003). It

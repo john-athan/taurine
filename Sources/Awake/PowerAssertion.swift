@@ -1,7 +1,7 @@
 import Foundation
 import IOKit.pwr_mgt
 
-/// The molecule. 🧪
+/// The molecule.
 ///
 /// Everything Taurine does ultimately comes down to one primitive: an IOKit
 /// *power assertion*. An assertion is a passive flag you hand the kernel that
@@ -25,7 +25,7 @@ struct SleepGuard: OptionSet {
     }
 }
 
-/// Holds one or more kernel assertions and, crucially, remembers *why*.
+/// Holds one or more kernel assertions and remembers *why*.
 /// The "why" is the whole point of Taurine, a reason you can read, and that
 /// can end on its own.
 final class PowerAssertion {

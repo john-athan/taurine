@@ -1,6 +1,6 @@
 import ApplicationServices
 
-/// Where in Finder the keystroke landed. 🔎
+/// Where in Finder the keystroke landed.
 ///
 /// Three fixes ask this, and they want different things from it, which is why
 /// the answer has three values rather than two.

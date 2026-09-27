@@ -1,6 +1,6 @@
 import Foundation
 
-/// The leftover. 🧹
+/// The leftover.
 ///
 /// Taurine used to limit charging itself: a root LaunchDaemon writing an
 /// undocumented SMC key. macOS 27 ships a charge limit in System Settings, and

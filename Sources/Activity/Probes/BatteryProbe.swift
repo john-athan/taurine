@@ -2,7 +2,7 @@ import Foundation
 import IOKit
 import IOKit.ps
 
-/// The plug. 🔌
+/// The plug.
 ///
 /// The one probe that looks outward. Every other tile measures what the chip is
 /// doing; this one measures what the wall is giving and what the cell is taking,
