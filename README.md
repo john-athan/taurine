@@ -33,7 +33,7 @@ taurine lockable on        # awake holds the Mac up, not the screen
 And while it's holding the line, a bull gallops out of your menu bar to say so.
 
 Ask what your Mac is *spending itself on* and it answers in watts, from the
-chip's own energy counters, with no password and nothing running until you open
+chip's own energy counters (up to macOS 26, see below), with no password and nothing running until you open
 the panel.
 
 No polling, no network, no analytics. **0 idle timers, 0 sockets**, and a
@@ -165,6 +165,9 @@ simply has no battery tile. See
 which will not run without root. Taurine reads the same energy counters directly
 through IOReport, which an ordinary process may do, so the panel never asks for
 anything. See [ADR 3](docs/adr/0003-ioreport-for-power-without-root.md).
+macOS 27 took that away: the counters still exist but stop moving for a process
+without root, so on macOS 27 the panel shows no watts and names the energy
+reading as unavailable, rather than asking for a password or showing a zero.
 
 **No cost while it is shut.** Nothing samples until the panel is on screen.
 Opening it creates one repeating timer and opens the probes; closing it cancels

@@ -97,6 +97,7 @@ func runActivityStagingTests() {
         }
         Check.that(cpu.clusters.contains { $0.activeResidency != nil },
                    "at least one cluster carries the residency the energy probe wrote")
-        Check.that(sample.power?.cpuWatts != nil, "and the watts arrived with it")
+        Check.that(sample.power.map { ($0.cpuWatts ?? 0) > 0 } ?? true,
+                   "and the watts, where the system still counts them, are not a frozen zero")
     }
 }

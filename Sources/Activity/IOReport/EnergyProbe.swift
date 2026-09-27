@@ -175,6 +175,10 @@ final class EnergyProbe: ActivityProbe {
         }
 
         sample.power = energy.activity
+        if energy.frozen {
+            sample.unavailable.append(ProbeFailure(name: name,
+                                                   reason: "macOS no longer updates the energy counters for an app without root"))
+        }
         apply(clusters, to: &sample)
         if let gpu, sample.gpu != nil {
             sample.gpu?.frequencyMHz = gpu.frequencyMHz
@@ -208,9 +212,18 @@ final class EnergyProbe: ActivityProbe {
             }
         }
 
+        /// A CPU that spent a whole window drawing nothing is not a reading, it
+        /// is a frozen counter. macOS 27 stops advancing the millijoule
+        /// channels for an unprivileged reader, `CPU Energy`, `GPU` and `ANE`
+        /// alike, while `GPU Energy` keeps moving. Showing the GPU's tenth of a
+        /// watt as the chip's total would be a confident wrong number, so the
+        /// tile goes away instead.
+        var frozen: Bool { cpu == 0 }
+
         /// The fine GPU channel wins where both exist, and the coarse one is
         /// the fallback on a chip that publishes no finer one.
         var activity: PowerActivity? {
+            if frozen { return nil }
             let power = PowerActivity(cpuWatts: cpu,
                                       gpuWatts: gpuFine ?? gpuCoarse,
                                       aneWatts: ane,
