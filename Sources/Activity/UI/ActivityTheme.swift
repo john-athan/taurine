@@ -19,14 +19,14 @@ import Cocoa
 ///     none of that and looks wrong in exactly one of those four, which is
 ///     always the one nobody checked.
 ///
-///   • **Data is never tertiary.** Composited over the window background,
+///   • **No text is tertiary.** Composited over the window background,
 ///     `tertiaryLabelColor` measures 1.88:1 in light appearance and 2.26:1 in
 ///     dark, well under the 3:1 asked even of large text; `secondaryLabelColor`
-///     measures 3.95:1 and 5.89:1 and clears it in both. Tertiary is the right
-///     colour for a word that labels a column and the wrong colour for the
-///     number in it, so the two have separate names here (`chrome` and
-///     `quietData`) and the choice is made by what the text *is* rather than by
-///     how quiet somebody wanted it to look.
+///     measures 3.95:1 and 5.89:1 and clears it in both. That rules tertiary out
+///     for the number and for the word that labels it, so `chrome` and
+///     `quietData` share a colour and the labels step back by size and weight
+///     instead. They keep separate names because they are different things,
+///     and the day one of them changes it should not drag the other along.
 ///
 ///   • **Monospaced digits everywhere a number changes.** Not monospaced text:
 ///     `monospacedDigitSystemFont` keeps the letters proportional and pins the
@@ -78,9 +78,8 @@ enum ActivityTheme {
     static var quietData: NSColor { .secondaryLabelColor }
 
     /// Words that label a number rather than being one: "read", "Wired", "ANE".
-    /// Nothing is lost by skimming past them, so these are the faintest text on
-    /// the panel.
-    static var chrome: NSColor { .tertiaryLabelColor }
+    /// Quiet, but legible: tertiary was tried and vanished on a dark popover.
+    static var chrome: NSColor { .secondaryLabelColor }
 
     /// The empty part of any meter.
     static var track: NSColor { .quaternaryLabelColor }

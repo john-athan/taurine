@@ -62,7 +62,13 @@ final class ActivityPanelController: NSObject, NSPopoverDelegate {
         scroll.scrollerStyle = .overlay
         scroll.autohidesScrollers = true
         scroll.hasHorizontalScroller = false
-        scroll.drawsBackground = false
+        // An opaque floor under the panel. On macOS 27 a popover is clear glass,
+        // so whatever sits behind it (a dark terminal, a red diff line) turns
+        // the light glass dark grey while the label colours stay tuned for light.
+        // The contrast ratios in `ActivityTheme` were measured against the
+        // window background, and this makes that the background they get.
+        scroll.drawsBackground = true
+        scroll.backgroundColor = .windowBackgroundColor
         scroll.automaticallyAdjustsContentInsets = false
         scroll.documentView = panel
         scroll.contentView.postsBoundsChangedNotifications = false
