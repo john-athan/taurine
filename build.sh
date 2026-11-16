@@ -8,7 +8,11 @@ BIN="$APP/Contents/MacOS/taurine"
 
 echo "▸ compiling…"
 rm -rf "$APP"
-mkdir -p "$APP/Contents/MacOS"
+mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
+# The app icon. assets/icon.svg is the source; AppIcon.icns is rendered from it
+# (824px of artwork on the 1024px macOS grid) and committed, so a build needs
+# nothing beyond swiftc.
+cp assets/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 # Sources/ is grouped by subsystem (App, Awake, Activity, Scroll, Finder,
 # Paste), so the file list is gathered rather than globbed. Sorted, so a build
 # is reproducible.
@@ -27,6 +31,7 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
   <key>CFBundleIdentifier</key><string>io.github.john-athan.taurine</string>
   <key>CFBundleVersion</key><string>1.6.0</string>
   <key>CFBundleShortVersionString</key><string>1.7.1</string>
+  <key>CFBundleIconFile</key><string>AppIcon</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleExecutable</key><string>taurine</string>
   <key>LSUIElement</key><true/>
