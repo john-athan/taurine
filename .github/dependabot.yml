@@ -1,7 +1,8 @@
 version: 2
 
-# github-actions is the only ecosystem here: taurine depends on nothing but the
-# Xcode command line tools, which Dependabot cannot see and does not need to.
+# One pull request per ecosystem per week, majors included. They are reviewed
+# and merged together with `oss update --merge`, which is what keeps two repos
+# built from the same template from drifting apart.
 updates:
   - package-ecosystem: "github-actions"
     directory: "/"
