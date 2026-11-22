@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="assets/icon.svg" width="96" alt="Taurine: a bull's head">
+
 # Taurine
 
 **Keep your Mac awake, with a reason.**
