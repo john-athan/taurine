@@ -9,6 +9,7 @@
 # The entry point is generated rather than hand-maintained: every
 # `func run<Something>Tests()` found in Tests/ is discovered and called, in
 # alphabetical order. Adding a test file is therefore a one-file change.
+# The `Check` harness itself is tools/Harness.swift, shared by every Swift app.
 # Frameworks and flags come from app.env, the same file the build reads.
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -65,7 +66,7 @@ SOURCES=()
 while IFS= read -r f; do SOURCES+=("$f"); done < <(
   find Sources -name '*.swift' ! -path 'Sources/App/main.swift' | sort
 )
-SOURCES+=("${TESTS[@]}")
+SOURCES+=(tools/Harness.swift "${TESTS[@]}")
 SOURCES+=("$GEN")
 
 LINK=()

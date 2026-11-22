@@ -1,14 +1,22 @@
-# Taurine, build & install. Depends only on swiftc (Xcode command line tools).
-APP     := build/Taurine.app
-PREFIX  ?= /Applications
-BINDIR  ?= /usr/local/bin
+# Build, test and install a Swift app. Depends only on swiftc (Xcode command
+# line tools). The same file for every Swift app in the fleet, owned by oss-kit
+# (templates/shared/swift): change it there, then `oss sync-tooling`.
+#
+# Name and executable come from Info.plist. What one app needs beyond this
+# lives in its app.mk, read last, so it can:
+#   set PREFIX         where the app is installed (default /Applications)
+#   set CLI := yes     link the executable onto the PATH as a command
+#   add install::      steps after the copy (double-colon rules run in order)
+#   add uninstall::    steps after the app is removed
 
-# The charge daemon older versions installed (ADR 11). Only uninstall knows it.
-DAEMON  := io.github.john-athan.taurine.charge
-SUPPORT := /Library/Application Support/Taurine
-HELPER  := /Library/PrivilegedHelperTools/$(DAEMON)
+NAME   := $(shell plutil -extract CFBundleName raw -o - Info.plist)
+EXE    := $(shell plutil -extract CFBundleExecutable raw -o - Info.plist)
+APP    := build/$(NAME).app
+PREFIX ?= /Applications
+BINDIR ?= /usr/local/bin
+CLI    ?=
 
-.PHONY: build test install uninstall clean
+.PHONY: build test check install uninstall clean
 
 build:
 	tools/build-app.sh
@@ -16,35 +24,33 @@ build:
 test:
 	tools/test.sh
 
-install: build
-	rm -rf "$(PREFIX)/$(notdir $(APP))"
+check:
+	tools/validate.sh
+
+install:: build
+	-pkill -f "$(PREFIX)/$(NAME).app" 2>/dev/null || true
+	mkdir -p "$(PREFIX)"
+	rm -rf "$(PREFIX)/$(NAME).app"
 	cp -R "$(APP)" "$(PREFIX)/"
-	@echo "▸ installed $(PREFIX)/$(notdir $(APP))"
-	@if [ -w "$(BINDIR)" ]; then \
-		ln -sf "$(PREFIX)/$(notdir $(APP))/Contents/MacOS/taurine" "$(BINDIR)/taurine"; \
-		echo "▸ linked CLI → $(BINDIR)/taurine"; \
+	@echo "▸ installed $(PREFIX)/$(NAME).app"
+	@if [ "$(CLI)" != yes ]; then :; \
+	elif [ -w "$(BINDIR)" ]; then \
+		ln -sf "$(PREFIX)/$(NAME).app/Contents/MacOS/$(EXE)" "$(BINDIR)/$(EXE)"; \
+		echo "▸ linked CLI → $(BINDIR)/$(EXE)"; \
 	else \
 		echo "▸ CLI needs one manual step:"; \
-		echo "    sudo ln -sf $(PREFIX)/$(notdir $(APP))/Contents/MacOS/taurine $(BINDIR)/taurine"; \
+		echo "    sudo ln -sf $(PREFIX)/$(NAME).app/Contents/MacOS/$(EXE) $(BINDIR)/$(EXE)"; \
 	fi
-	open "$(PREFIX)/$(notdir $(APP))"
 
-# The old charge daemon holds a bit in the SMC, not in a file, so its helper is
-# told to let go before it is deleted.
-uninstall:
-	@if [ -f "/Library/LaunchDaemons/$(DAEMON).plist" ]; then \
-		echo "▸ releasing the charge limit (needs sudo)…"; \
-		sudo "$(HELPER)" --charge-unlock || true; \
-		sudo launchctl bootout system/$(DAEMON) 2>/dev/null || true; \
-		sudo rm -f "/Library/LaunchDaemons/$(DAEMON).plist"; \
-		sudo rm -f "$(HELPER)"; \
-		sudo rm -rf "$(SUPPORT)"; \
-		echo "▸ removed the old charge daemon"; \
+uninstall::
+	-pkill -f "$(PREFIX)/$(NAME).app" 2>/dev/null || true
+	rm -rf "$(PREFIX)/$(NAME).app"
+	@if [ "$(CLI)" = yes ] && [ -L "$(BINDIR)/$(EXE)" ]; then \
+		rm -f "$(BINDIR)/$(EXE)" 2>/dev/null || echo "▸ remove the CLI link with: sudo rm $(BINDIR)/$(EXE)"; \
 	fi
-	-pkill -f "$(PREFIX)/$(notdir $(APP))" 2>/dev/null || true
-	rm -rf "$(PREFIX)/$(notdir $(APP))"
-	rm -f "$(BINDIR)/taurine"
-	@echo "▸ removed Taurine"
+	@echo "▸ removed $(NAME)"
 
 clean:
 	rm -rf build .build
+
+-include app.mk

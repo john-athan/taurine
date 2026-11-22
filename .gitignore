@@ -1,10 +1,8 @@
+# Owned by oss-kit (templates/shared/swift). Change it there, then oss sync-tooling.
 build/
 .build/
 *.o
 *.swiftmodule
-
-# macOS
 .DS_Store
-
 # Agent worktrees
 .claude/
