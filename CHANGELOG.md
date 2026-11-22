@@ -6,6 +6,16 @@ All notable changes to this project are documented here. Format loosely follows
 
 ## [Unreleased]
 
+## [1.7.4] - 2026-11-22
+
+### Changed
+- taurine -- <command> exits 128+n when the command dies from a signal, as a shell would, instead of the bare signal number that scripts read as an ordinary failure code
+- The app icon is the bull from the terminal, (o@) in glowing red dot matrix on a CRT tile, and the social card follows it
+- Add a social card and put the app icon above the README title
+- Build, test and install through oss-kit's shared Swift Makefile and test harness; Taurine's own steps move to app.mk, TapThreads to its own test file
+- Build and test through the shared Swift scripts, add a changelog
+- Fleet base from oss-kit: dependabot generated from the repo's kinds, runtime versions in pin files that CI reads, and what else the fleet now requires here (licence, check script, Info.plist as version source)
+
 ## [1.7.3] - 2026-11-22
 
 ### Fixed
