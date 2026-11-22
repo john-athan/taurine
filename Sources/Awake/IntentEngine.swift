@@ -116,7 +116,10 @@ enum CommandMode {
         assertion.release()
 
         print("\n" + Bull.grazing)
-        print("🐂 done, Taurine let go. (`\(pretty)` exited \(p.terminationStatus))")
-        return p.terminationStatus
+        // A signal's number is not an exit code: scripts expect the shell's 128+n,
+        // or a killed build would look like a build that exited with status 9.
+        let code = p.terminationReason == .uncaughtSignal ? 128 + p.terminationStatus : p.terminationStatus
+        print("🐂 done, Taurine let go. (`\(pretty)` exited \(code))")
+        return code
     }
 }
