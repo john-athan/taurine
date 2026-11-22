@@ -1,5 +1,4 @@
-# Build output
-Taurine.app/
+build/
 .build/
 *.o
 *.swiftmodule

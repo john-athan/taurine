@@ -1,5 +1,5 @@
 # Taurine, build & install. Depends only on swiftc (Xcode command line tools).
-APP     := Taurine.app
+APP     := build/Taurine.app
 PREFIX  ?= /Applications
 BINDIR  ?= /usr/local/bin
 
@@ -11,23 +11,23 @@ HELPER  := /Library/PrivilegedHelperTools/$(DAEMON)
 .PHONY: build test install uninstall clean
 
 build:
-	./build.sh
+	tools/build-app.sh
 
 test:
-	./Tests/run.sh
+	tools/test.sh
 
 install: build
-	rm -rf "$(PREFIX)/$(APP)"
+	rm -rf "$(PREFIX)/$(notdir $(APP))"
 	cp -R "$(APP)" "$(PREFIX)/"
-	@echo "▸ installed $(PREFIX)/$(APP)"
+	@echo "▸ installed $(PREFIX)/$(notdir $(APP))"
 	@if [ -w "$(BINDIR)" ]; then \
-		ln -sf "$(PREFIX)/$(APP)/Contents/MacOS/taurine" "$(BINDIR)/taurine"; \
+		ln -sf "$(PREFIX)/$(notdir $(APP))/Contents/MacOS/taurine" "$(BINDIR)/taurine"; \
 		echo "▸ linked CLI → $(BINDIR)/taurine"; \
 	else \
 		echo "▸ CLI needs one manual step:"; \
-		echo "    sudo ln -sf $(PREFIX)/$(APP)/Contents/MacOS/taurine $(BINDIR)/taurine"; \
+		echo "    sudo ln -sf $(PREFIX)/$(notdir $(APP))/Contents/MacOS/taurine $(BINDIR)/taurine"; \
 	fi
-	open "$(PREFIX)/$(APP)"
+	open "$(PREFIX)/$(notdir $(APP))"
 
 # The old charge daemon holds a bit in the SMC, not in a file, so its helper is
 # told to let go before it is deleted.
@@ -41,10 +41,10 @@ uninstall:
 		sudo rm -rf "$(SUPPORT)"; \
 		echo "▸ removed the old charge daemon"; \
 	fi
-	-pkill -f "$(PREFIX)/$(APP)" 2>/dev/null || true
-	rm -rf "$(PREFIX)/$(APP)"
+	-pkill -f "$(PREFIX)/$(notdir $(APP))" 2>/dev/null || true
+	rm -rf "$(PREFIX)/$(notdir $(APP))"
 	rm -f "$(BINDIR)/taurine"
 	@echo "▸ removed Taurine"
 
 clean:
-	rm -rf "$(APP)" .build
+	rm -rf build .build

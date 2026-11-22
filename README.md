@@ -78,8 +78,8 @@ make install       # builds, installs to /Applications, links the CLI, launches
 ### Fully manual
 
 ```bash
-./build.sh
-cp -R Taurine.app /Applications/ && open /Applications/Taurine.app
+tools/build-app.sh
+cp -R build/Taurine.app /Applications/ && open /Applications/Taurine.app
 sudo ln -sf /Applications/Taurine.app/Contents/MacOS/taurine /usr/local/bin/taurine
 ```
 

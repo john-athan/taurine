@@ -6,7 +6,7 @@ between "we wrote it" and "nobody checked".
 
 ## Dependencies
 
-None, and there is no manifest that could acquire one. `build.sh` gathers every
+None, and there is no manifest that could acquire one. `tools/build-app.sh` gathers every
 `.swift` file under `Sources/` and hands the list to `swiftc`; there is no
 `Package.swift`, no Xcode project and no package manager. The app links Apple's
 SDK frameworks only (Cocoa, IOKit, Carbon, ServiceManagement), which are used
