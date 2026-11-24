@@ -16,7 +16,6 @@ plutil -lint Info.plist >/dev/null
 plist() { plutil -extract "$1" raw -o - Info.plist; }
 NAME=$(plist CFBundleName)
 EXE=$(plist CFBundleExecutable)
-ID=$(plist CFBundleIdentifier)
 
 APP="build/$NAME.app"
 echo "▸ compiling $NAME $(plist CFBundleShortVersionString)…"
@@ -44,8 +43,8 @@ if [ -n "$RESOURCES" ]; then
   cp $RESOURCES "$APP/Contents/Resources/"
 fi
 
-# Ad-hoc sign so Login Items, Accessibility and the keychain ACL work on this
-# machine. The identifier is the bundle id, so the grant survives a rebuild.
-codesign --force --sign - --identifier "$ID" "$APP"
+# With this Mac's own certificate if it has one, so a rebuild keeps its grants;
+# otherwise ad-hoc, which does not.
+tools/sign-app.sh "$APP"
 
 echo "▸ built $PWD/$APP"

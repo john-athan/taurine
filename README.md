@@ -62,11 +62,15 @@ with no arguments launches the menu bar app. Homebrew builds from source on
 your machine, so there's **no "unidentified developer" Gatekeeper prompt** and
 nothing to notarize.
 
-To also keep it in `/Applications` (for the login-item toggle):
+To keep it in `/Applications`, for the login-item toggle and for a permission that
+survives upgrades:
 
 ```bash
-cp -R "$(brew --prefix taurine)/Taurine.app" /Applications/
+taurine-install    # again after every brew upgrade taurine
 ```
+
+It signs the copy with a self-signed certificate made on your Mac, which is how
+macOS recognises the next version. The `taurine` command then runs that copy.
 
 ### Make (no Homebrew)
 
@@ -81,7 +85,7 @@ make install       # builds, installs to /Applications, links the CLI, launches
 
 ```bash
 tools/build-app.sh
-cp -R build/Taurine.app /Applications/ && open /Applications/Taurine.app
+tools/install-app.sh build/Taurine.app && open /Applications/Taurine.app
 sudo ln -sf /Applications/Taurine.app/Contents/MacOS/taurine /usr/local/bin/taurine
 ```
 
@@ -199,11 +203,11 @@ the other class, so the feature works the same for people who prefer the
 traditional feel everywhere.
 
 Off by default, because modifying scroll events needs Accessibility permission,
-and Taurine would rather ask for nothing until you ask it to. macOS grants that
-permission to a specific build of a binary, so a rebuild or an upgrade means
-granting it again: remove Taurine from the Accessibility list with the minus
-button and add it back. The menu item says so when that has happened, instead of
-looking switched on and doing nothing.
+and Taurine would rather ask for nothing until you ask it to. Installed with
+`make install` or `taurine-install`, it keeps that permission across upgrades. A
+copy made any other way is a new app to macOS after every build: remove Taurine
+from the Accessibility list with the minus button and add it back. The menu item
+says so when that has happened, instead of looking switched on and doing nothing.
 
 One known limit, stated because you would otherwise find it yourself: a mouse
 driven by vendor software (Logi Options+ and friends) hands macOS scroll events

@@ -28,11 +28,7 @@ check:
 	tools/validate.sh
 
 install:: build
-	-pkill -f "$(PREFIX)/$(NAME).app" 2>/dev/null || true
-	mkdir -p "$(PREFIX)"
-	rm -rf "$(PREFIX)/$(NAME).app"
-	cp -R "$(APP)" "$(PREFIX)/"
-	@echo "▸ installed $(PREFIX)/$(NAME).app"
+	tools/install-app.sh "$(APP)" "$(PREFIX)"
 	@if [ "$(CLI)" != yes ]; then :; \
 	elif [ -w "$(BINDIR)" ]; then \
 		ln -sf "$(PREFIX)/$(NAME).app/Contents/MacOS/$(EXE)" "$(BINDIR)/$(EXE)"; \

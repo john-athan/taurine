@@ -119,7 +119,8 @@ claimed about SteerMouse or USB Overdrive.
   Taurine is ad-hoc signed and built from source, so rebuilding or upgrading
   produces a binary the system does not recognise and the permission has to be
   granted again. The app detects that state and says so, instead of appearing
-  broken.
+  broken. (Amended 2026-11-24: installing now signs with a certificate made on
+  the Mac, and the permission survives upgrades.)
 - The tap modifies events, so it is a `.defaultTap` and every scroll on the
   machine waits on it. What it does not do is poll: it costs nothing when
   nothing is scrolling and it adds no timer, so the badge still reads `0 timers`

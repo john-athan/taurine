@@ -10,8 +10,9 @@ import ApplicationServices
 ///
 /// The grant is not attached to an app, it is attached to a code identity. A
 /// signed app keeps its identity across updates because the signature says so.
-/// Taurine is ad-hoc signed and built from source, so its identity is a hash of
-/// the binary: `tools/build-app.sh` produces a stranger. The switch in System Settings
+/// Installed with `tools/install-app.sh`, Taurine is signed with this Mac's own
+/// certificate and keeps its identity too. An ad-hoc build does not: its identity is
+/// a hash of the binary, so every build is a stranger. The switch in System Settings
 /// stays on, `AXIsProcessTrusted()` starts answering false, and the feature is
 /// dead while the settings pane insists it is alive. That specific
 /// contradiction is why this type exists instead of one call at the point of
