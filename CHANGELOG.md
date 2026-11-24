@@ -6,6 +6,8 @@ All notable changes to this project are documented here. Format loosely follows
 
 ## [Unreleased]
 
+## [1.7.5] - 2026-11-24
+
 ### Changed
 - The Accessibility grant survives upgrades: installing signs the app with a certificate made on your Mac, and clears the dead entry of an older build so macOS asks one last time
 - Homebrew: `taurine-install` copies and signs the app, instead of `cp -R`, and the `taurine` command runs the installed copy
